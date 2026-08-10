@@ -1,0 +1,127 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DriveStatus {
+  UNCLASSIFIED
+  BUSINESS
+  PERSONAL
+}
+
+model User {
+  id                    String       @id @default(cuid())
+  teslaUserId           String       @unique
+  email                 String?
+  displayName           String?
+  accessTokenEncrypted  String?
+  refreshTokenEncrypted String?
+  tokenExpiresAt        DateTime?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  vehicles              Vehicle[]
+  drives                Drive[]
+  categories            Category[]
+  settings              AppSettings?
+  sessions              Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Vehicle {
+  id                  String   @id @default(cuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vin                 String
+  displayName         String?
+  trackingEnabled     Boolean  @default(false)
+  virtualKeyPaired    Boolean  @default(false)
+  telemetryConfigured Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  drives              Drive[]
+
+  @@unique([userId, vin])
+  @@index([vin])
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  deductible  Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  drives      Drive[]
+
+  @@unique([userId, name])
+  @@index([userId, sortOrder])
+}
+
+model Drive {
+  id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicleId      String
+  vehicle        Vehicle      @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  categoryId     String?
+  category       Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  startedAt      DateTime
+  endedAt        DateTime?
+  startOdometer  Float
+  endOdometer    Float?
+  distanceMiles  Float?
+  durationSec    Int?
+  startLat       Float?
+  startLng       Float?
+  endLat         Float?
+  endLng         Float?
+  startAddress   String?
+  endAddress     String?
+  status         DriveStatus  @default(UNCLASSIFIED)
+  purposeNote    String?
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  points         DrivePoint[]
+
+  @@index([userId, status, startedAt])
+  @@index([userId, categoryId, startedAt])
+  @@index([vehicleId, startedAt])
+}
+
+model DrivePoint {
+  id         String   @id @default(cuid())
+  driveId    String
+  drive      Drive    @relation(fields: [driveId], references: [id], onDelete: Cascade)
+  lat        Float
+  lng        Float
+  recordedAt DateTime
+  odometer   Float?
+
+  @@index([driveId, recordedAt])
+}
+
+model AppSettings {
+  id           String @id @default(cuid())
+  userId       String @unique
+  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mileageRate  Float  @default(0.70)
+  timezone     String @default("America/New_York")
+  weekStartsOn Int    @default(0)
+}

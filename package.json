@@ -1,0 +1,26 @@
+{
+  "name": "mile-triage",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "db:generate": "npm run prisma:generate --workspace=@mile-triage/api",
+    "db:migrate": "npm run prisma:migrate --workspace=@mile-triage/api",
+    "db:seed": "npm run prisma:seed --workspace=@mile-triage/api",
+    "db:studio": "npm run prisma:studio --workspace=@mile-triage/api",
+    "tesla:keys": "bash scripts/generate-tesla-keys.sh"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.4",
+    "typescript": "^5.8.3"
+  },
+  "packageManager": "npm@11.4.2",
+  "engines": {
+    "node": ">=20"
+  }
+}

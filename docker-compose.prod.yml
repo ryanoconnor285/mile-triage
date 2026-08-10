@@ -1,0 +1,52 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: miletriage
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-miletriage}
+      POSTGRES_DB: miletriage
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U miletriage -d miletriage"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://miletriage:${POSTGRES_PASSWORD:-miletriage}@db:5432/miletriage?schema=public
+      PORT: 3001
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
+      AUTH_MODE: ${AUTH_MODE:-mock}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:-change-me-in-production}
+      INTERNAL_TELEMETRY_SECRET: ${INTERNAL_TELEMETRY_SECRET:-change-me-in-production}
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-in-production}
+      DEFAULT_MILEAGE_RATE: ${DEFAULT_MILEAGE_RATE:-0.70}
+      TESLA_CLIENT_ID: ${TESLA_CLIENT_ID:-}
+      TESLA_CLIENT_SECRET: ${TESLA_CLIENT_SECRET:-}
+      TESLA_REDIRECT_URI: ${TESLA_REDIRECT_URI:-}
+      TESLA_DOMAIN: ${TESLA_DOMAIN:-}
+    volumes:
+      - ./keys:/app/keys:ro
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-8080}:80"
+
+volumes:
+  pgdata_prod:
