@@ -32,10 +32,11 @@ GitHub = Railway builds from this repo using our Dockerfiles.
 ### API service
 
 1. **Add Service → GitHub Repo** (same `mile-triage` repo), name it `api`
-2. Settings:
-   - **Dockerfile path:** `Dockerfile.api`
-   - **Root directory:** `/` (repo root)
-   - **Watch paths / build:** leave default
+2. Force Docker builds (Railpack will fail on this monorepo). Pick **one**:
+   - **Easiest:** Variables → add `RAILWAY_DOCKERFILE_PATH` = `Dockerfile.api`
+   - **Or:** Settings → Config-as-code → set config file to `/railway.api.toml`
+   - **Or:** Settings → Build → Builder = Dockerfile, Dockerfile path = `Dockerfile.api`
+3. Root directory must be repo root (`/` / empty), not `apps/api`
 3. Variables (API service):
 
 | Variable | Value |
