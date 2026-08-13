@@ -34,11 +34,7 @@ export class CategoriesController {
   }
 
   @Patch(':id')
-  update(
-    @Req() req: Request,
-    @Param('id') id: string,
-    @Body() body: unknown,
-  ) {
+  update(@Req() req: Request, @Param('id') id: string, @Body() body: unknown) {
     const parsed = UpdateCategorySchema.parse(body);
     return this.categories.update(req.user!.id, id, parsed);
   }

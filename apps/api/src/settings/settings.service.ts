@@ -21,7 +21,11 @@ export class SettingsService {
 
   async update(
     userId: string,
-    data: Partial<{ mileageRate: number; timezone: string; weekStartsOn: 0 | 1 }>,
+    data: Partial<{
+      mileageRate: number;
+      timezone: string;
+      weekStartsOn: 0 | 1;
+    }>,
   ) {
     const settings = await this.prisma.appSettings.upsert({
       where: { userId },

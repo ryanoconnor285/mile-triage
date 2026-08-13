@@ -134,6 +134,11 @@ export class SimulateController {
       });
     }
 
-    return { ok: true, label: route.label, driveId, processed: result.processed };
+    return {
+      ok: true,
+      label: route.label,
+      driveId,
+      processed: result.processed,
+    };
   }
 }

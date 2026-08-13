@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Get,
-  Query,
-  Req,
-  Res,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { SessionGuard } from '../auth/session.guard';
 import { SettingsService } from '../settings/settings.service';
@@ -22,7 +15,8 @@ export class ReportsController {
   @Get('reports/summary')
   summary(
     @Req() req: Request,
-    @Query('from') from = new Date(new Date().getFullYear(), 0, 1).toISOString(),
+    @Query('from')
+    from = new Date(new Date().getFullYear(), 0, 1).toISOString(),
     @Query('to') to = new Date().toISOString(),
   ) {
     return this.reports.summary(req.user!.id, from, to);
@@ -32,7 +26,8 @@ export class ReportsController {
   async csv(
     @Req() req: Request,
     @Res() res: Response,
-    @Query('from') from = new Date(new Date().getFullYear(), 0, 1).toISOString(),
+    @Query('from')
+    from = new Date(new Date().getFullYear(), 0, 1).toISOString(),
     @Query('to') to = new Date().toISOString(),
   ) {
     const rows = await this.reports.exportRows(req.user!.id, from, to);
@@ -49,7 +44,8 @@ export class ReportsController {
   async pdf(
     @Req() req: Request,
     @Res() res: Response,
-    @Query('from') from = new Date(new Date().getFullYear(), 0, 1).toISOString(),
+    @Query('from')
+    from = new Date(new Date().getFullYear(), 0, 1).toISOString(),
     @Query('to') to = new Date().toISOString(),
   ) {
     const [rows, settings] = await Promise.all([

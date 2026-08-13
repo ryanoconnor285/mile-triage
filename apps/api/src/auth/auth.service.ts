@@ -34,9 +34,7 @@ export class AuthService {
     expiresAt: Date;
   }> {
     const token = this.crypto.randomToken(32);
-    const expiresAt = new Date(
-      Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000,
-    );
+    const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
     await this.prisma.session.create({
       data: {
         userId,
@@ -70,7 +68,11 @@ export class AuthService {
     });
   }
 
-  async loginWithMock(): Promise<{ user: AuthUser; token: string; expiresAt: Date }> {
+  async loginWithMock(): Promise<{
+    user: AuthUser;
+    token: string;
+    expiresAt: Date;
+  }> {
     const user = await this.prisma.user.upsert({
       where: { teslaUserId: 'mock-tesla-user' },
       create: {
@@ -176,8 +178,7 @@ export class AuthService {
     const clientSecret = this.config.getOrThrow<string>('TESLA_CLIENT_SECRET');
     const redirectUri = this.config.getOrThrow<string>('TESLA_REDIRECT_URI');
     const tokenUrl =
-      this.config.get<string>('TESLA_TOKEN_URL') ??
-      DEFAULT_TESLA_TOKEN_URL;
+      this.config.get<string>('TESLA_TOKEN_URL') ?? DEFAULT_TESLA_TOKEN_URL;
     const audience =
       this.config.get<string>('TESLA_AUDIENCE') ?? DEFAULT_TESLA_API_BASE;
 
@@ -206,7 +207,9 @@ export class AuthService {
       id_token?: string;
     };
 
-    const teslaUserId = this.decodeSub(tokens.id_token) ?? this.crypto.hashToken(tokens.access_token).slice(0, 24);
+    const teslaUserId =
+      this.decodeSub(tokens.id_token) ??
+      this.crypto.hashToken(tokens.access_token).slice(0, 24);
     const email = this.decodeEmail(tokens.id_token);
 
     const user = await this.prisma.user.upsert({
