@@ -34,14 +34,4 @@ export class VehiclesController {
   ) {
     return this.vehicles.setTracking(req.user!.id, id, body.enabled ?? true);
   }
-
-  @Post(':id/paired')
-  paired(@Req() req: Request, @Param('id') id: string) {
-    return this.vehicles.markVirtualKeyPaired(req.user!.id, id);
-  }
-
-  @Get(':id/pairing')
-  pairing(@Req() req: Request, @Param('id') id: string) {
-    return this.vehicles.pairingInfo(req.user!.id, id);
-  }
 }

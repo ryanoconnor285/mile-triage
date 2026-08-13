@@ -61,11 +61,30 @@ like `*.up.railway.app` cannot be used — the root would be `railway.app`.
 4. Confirm the key is live at
    `https://YOUR_DOMAIN/.well-known/appspecific/com.tesla.3p.public-key.pem`
 5. Register with Fleet API (once per region): `npm run tesla:register`
-6. Sign in via **Connect Tesla**, then pair the car at `https://tesla.com/_ak/YOUR_DOMAIN`
-7. Open **Setup** in the app for a live checklist
+6. Sign in via **Connect Tesla**, sync vehicles, then turn on tracking
 
-Steps 1–6 give you login and vehicle sync. Drives still won't populate until
-Fleet Telemetry configure is wired — see `configureTelemetryStub`.
+No virtual key pairing is needed. Drives are detected by polling rather than
+push, so the `vehicle_device_data` and `vehicle_location` scopes are enough.
+
+## How drives are detected
+
+Tracked cars are polled on an adaptive schedule and a drive is recorded when the
+odometer has advanced between two sightings of a *parked* car. The last parked
+sighting is the "anchor", which means a missed poll — or a car that sleeps
+through an entire trip — still yields one drive with the correct distance and
+endpoints. Polling never calls `wake_up`, so it costs no battery: a sleeping car
+returns 408 and is simply retried later.
+
+| Car state | Poll interval |
+| --- | --- |
+| In gear (`D`/`R`/`N`) | 2 min |
+| Parked and awake | 10 min |
+| Asleep or offline | 20 min |
+
+Trade-offs: there is no route line between endpoints, and duration is only
+recorded when departure was actually observed. Consecutive trips are split at
+each stop the poller happens to see. Set `TESLA_POLLING_ENABLED=false` to
+disable.
 
 ## Telemetry ingest (dev)
 

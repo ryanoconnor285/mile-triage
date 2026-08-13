@@ -17,6 +17,24 @@ export type TeslaVehicleDto = {
   displayName: string | null;
 };
 
+/**
+ * A single observation of a car. `reachable: false` means the car was asleep or
+ * offline, which is normal and carries no information — never a reason to treat
+ * the car as parked.
+ */
+export type TeslaVehicleSnapshot = {
+  reachable: boolean;
+  odometer: number | null;
+  lat: number | null;
+  lng: number | null;
+  /** 'D' | 'R' | 'N' | 'P', or null which Tesla also uses for a parked car. */
+  shiftState: string | null;
+  observedAt: Date;
+};
+
+/** Tesla returns 408 for a sleeping car; asking again will not change that. */
+const VEHICLE_ASLEEP_STATUS = 408;
+
 @Injectable()
 export class TeslaApiService {
   private readonly logger = new Logger(TeslaApiService.name);
@@ -256,19 +274,92 @@ export class TeslaApiService {
   }
 
   /**
-   * Placeholder for Fleet Telemetry configure call.
-   * Requires vehicle-command proxy + signed config in production.
+   * Read odometer, gear and location for one car.
+   *
+   * Deliberately never calls `wake_up`: a sleeping car costs battery to wake,
+   * and park detection does not need the reading. A 408 is reported as
+   * unreachable so the caller can back off and try later.
    */
-  configureTelemetryStub(vin: string): {
-    ok: boolean;
-    message: string;
-    vin: string;
-  } {
+  async getVehicleSnapshot(
+    userId: string,
+    vin: string,
+  ): Promise<TeslaVehicleSnapshot> {
+    const accessToken = await this.getAccessToken(userId);
+    const base = await this.resolveApiBase(userId, accessToken);
+    const url =
+      `${base}/api/1/vehicles/${encodeURIComponent(vin)}/vehicle_data` +
+      `?endpoints=${encodeURIComponent('drive_state;vehicle_state')}`;
+
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+    });
+
+    const unreachable: TeslaVehicleSnapshot = {
+      reachable: false,
+      odometer: null,
+      lat: null,
+      lng: null,
+      shiftState: null,
+      observedAt: new Date(),
+    };
+
+    if (res.status === VEHICLE_ASLEEP_STATUS) {
+      return unreachable;
+    }
+
+    if (!res.ok) {
+      const detail = await this.failureDetail(res);
+      if (res.status === 412 || res.status === 421) {
+        this.regionCache.delete(userId);
+      }
+      if (res.status === 401) {
+        throw new UnauthorizedException(
+          'Tesla rejected the saved token. Log out and reconnect Tesla.',
+        );
+      }
+      if (res.status === 403) {
+        const granted = this.grantedScopes(accessToken);
+        throw new ServiceUnavailableException(
+          `Tesla denied vehicle data. This login granted ${
+            granted ? `"${granted}"` : 'no readable scopes'
+          }, but reading odometer and location needs vehicle_device_data and vehicle_location. Details: ${detail}`,
+        );
+      }
+      throw new ServiceUnavailableException(
+        `Tesla vehicle data failed (${res.status}): ${detail}`,
+      );
+    }
+
+    const json = (await res.json()) as {
+      response?: {
+        state?: string;
+        drive_state?: {
+          shift_state?: string | null;
+          latitude?: number;
+          longitude?: number;
+          timestamp?: number;
+        };
+        vehicle_state?: { odometer?: number };
+      };
+    };
+
+    const drive = json.response?.drive_state;
+    const odometer = json.response?.vehicle_state?.odometer;
+    if (json.response?.state && json.response.state !== 'online') {
+      return unreachable;
+    }
+
     return {
-      ok: false,
-      vin,
-      message:
-        'Fleet Telemetry configure is not wired yet. After Tesla app approval, point vehicles at your telemetry host via the vehicle-command proxy.',
+      reachable: true,
+      // Fleet API reports odometer in miles regardless of the car's display units.
+      odometer: typeof odometer === 'number' ? odometer : null,
+      lat: typeof drive?.latitude === 'number' ? drive.latitude : null,
+      lng: typeof drive?.longitude === 'number' ? drive.longitude : null,
+      shiftState: drive?.shift_state ?? null,
+      observedAt: drive?.timestamp ? new Date(drive.timestamp) : new Date(),
     };
   }
 }

@@ -64,14 +64,6 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ enabled }),
     }),
-  markPaired: (id: string) =>
-    request<Vehicle>(`/vehicles/${id}/paired`, { method: 'POST' }),
-  pairing: (id: string) =>
-    request<{
-      pairingUrl: string;
-      displayName: string | null;
-      note?: string;
-    }>(`/vehicles/${id}/pairing`),
   categories: () => request<Category[]>('/categories'),
   createCategory: (name: string, deductible: boolean) =>
     request<Category>('/categories', {

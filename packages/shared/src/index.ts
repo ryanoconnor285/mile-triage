@@ -36,7 +36,7 @@ export const DrivePointSchema = z.object({
 });
 export type DrivePoint = z.infer<typeof DrivePointSchema>;
 
-export const DriveSourceSchema = z.enum(['TELEMETRY', 'MANUAL']);
+export const DriveSourceSchema = z.enum(['TELEMETRY', 'MANUAL', 'POLLED']);
 export type DriveSource = z.infer<typeof DriveSourceSchema>;
 
 export const DriveSummarySchema = z.object({

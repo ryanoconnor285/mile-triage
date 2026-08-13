@@ -16,6 +16,7 @@ enum DriveStatus {
 enum DriveSource {
   TELEMETRY
   MANUAL
+  POLLED
 }
 
 model User {
@@ -55,12 +56,29 @@ model Vehicle {
   trackingEnabled     Boolean  @default(false)
   virtualKeyPaired    Boolean  @default(false)
   telemetryConfigured Boolean  @default(false)
+
+  // Park-detection state. The anchor is the last observation where the car was
+  // parked; a trip is recognised when the odometer has advanced between two
+  // parked sightings, so missing a poll mid-drive still yields one drive.
+  anchorOdometer      Float?
+  anchorLat           Float?
+  anchorLng           Float?
+  anchorAt            DateTime?
+  // Set when the car is first seen in gear, so duration is only recorded when
+  // departure was actually observed rather than inferred from poll spacing.
+  tripStartedAt       DateTime?
+  lastShiftState      String?
+  lastPolledAt        DateTime?
+  nextPollAt          DateTime?
+  pollFailures        Int      @default(0)
+
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   drives              Drive[]
 
   @@unique([userId, vin])
   @@index([vin])
+  @@index([trackingEnabled, nextPollAt])
 }
 
 model Category {

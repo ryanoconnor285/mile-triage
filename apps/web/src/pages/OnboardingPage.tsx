@@ -1,17 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { QRCodeSVG } from 'qrcode.react';
 import type { Vehicle } from '@mile-triage/shared';
 import { api } from '../api';
 
 export function OnboardingPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [pairingUrl, setPairingUrl] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   const load = async () => {
     try {
@@ -39,34 +35,13 @@ export function OnboardingPage() {
     }
   };
 
-  const enable = async (id: string) => {
-    await api.trackVehicle(id, true);
+  const setTracking = async (id: string, enabled: boolean) => {
+    setError(null);
     try {
-      const pairing = await api.pairing(id);
-      setPairingUrl(pairing.pairingUrl);
-      setNote(pairing.note ?? null);
-    } catch {
-      setPairingUrl(null);
-      setNote(
-        'Enable tracking saved. Pairing link needs TESLA_DOMAIN in live mode.',
-      );
-    }
-    await load();
-  };
-
-  const markPaired = async (id: string) => {
-    await api.markPaired(id);
-    await load();
-  };
-
-  const copyPairingUrl = async () => {
-    if (!pairingUrl) return;
-    try {
-      await navigator.clipboard.writeText(pairingUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setError('Could not copy — select the link and copy it manually.');
+      await api.trackVehicle(id, enabled);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not update tracking');
     }
   };
 
@@ -77,8 +52,8 @@ export function OnboardingPage() {
           Choose vehicles
         </h1>
         <p className="muted">
-          Sync from Tesla, turn on tracking, then pair the virtual key so the
-          car can send drives.
+          Sync from Tesla and turn on tracking. MileTriage then logs a drive
+          whenever the car parks somewhere new.
         </p>
       </div>
       {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
@@ -103,70 +78,66 @@ export function OnboardingPage() {
               <span className={`chip ${v.trackingEnabled ? 'on' : ''}`}>
                 {v.trackingEnabled ? 'Tracking on' : 'Not tracking'}
               </span>
-              <span className={`chip ${v.virtualKeyPaired ? 'on' : ''}`}>
-                {v.virtualKeyPaired ? 'Key paired' : 'Key not paired'}
-              </span>
-              {v.telemetryConfigured && (
-                <span className="chip on">Telemetry ready</span>
-              )}
             </div>
             <div className="vehicle-tile-actions">
               <button
-                className={`btn ${v.trackingEnabled ? 'secondary' : ''}`}
-                onClick={() => void enable(v.id)}
+                className={`btn ${v.trackingEnabled ? 'ghost' : ''}`}
+                onClick={() => void setTracking(v.id, !v.trackingEnabled)}
               >
-                {v.trackingEnabled ? 'Tracking' : 'Track this car'}
+                {v.trackingEnabled ? 'Stop tracking' : 'Track this car'}
               </button>
-              {v.trackingEnabled && !v.virtualKeyPaired && (
-                <button
-                  className="btn ghost"
-                  onClick={() => void markPaired(v.id)}
-                >
-                  Mark paired
-                </button>
-              )}
             </div>
           </div>
         ))}
       </div>
-      {pairingUrl && (
-        <div className="pairing">
-          <div className="pairing-copy">
-            <h2 className="pairing-title">Pair the virtual key</h2>
-            <p className="muted">
-              Scan this with your phone camera, or open the link on a phone that
-              has the Tesla app installed and is signed in to the same account.
-            </p>
-            <div className="actions">
-              <a
-                className="btn"
-                href={pairingUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open in Tesla app
-              </a>
-              <button
-                className="btn ghost"
-                onClick={() => void copyPairingUrl()}
-              >
-                {copied ? 'Copied' : 'Copy link'}
-              </button>
-            </div>
-            <p className="pairing-url">{pairingUrl}</p>
-            {note && <p className="muted">{note}</p>}
+      <div className="access">
+        <h2 className="section-title">What MileTriage can see</h2>
+        <div className="access-cols">
+          <div>
+            <span className="muted">Reads from your Tesla account</span>
+            <ul>
+              <li>Which cars are on the account, with names and VINs</li>
+              <li>Odometer readings, to work out how far a trip was</li>
+              <li>
+                Location at the start and end of a trip, for the map and
+                addresses
+              </li>
+            </ul>
           </div>
-          <div className="qr">
-            <QRCodeSVG
-              value={pairingUrl}
-              size={160}
-              bgColor="#ffffff"
-              fgColor="#0f172a"
-              marginSize={2}
-            />
+          <div>
+            <span className="muted">Never does</span>
+            <ul>
+              <li>
+                Send a command to your car. Unlocking, starting, and remote
+                control need Tesla&apos;s Vehicle Commands permission, which
+                this app does not ask for.
+              </li>
+              <li>
+                Wake your car. Readings are only taken when it is already awake,
+                so tracking costs no battery.
+              </li>
+              <li>
+                Touch your charging. If you allowed charging access when you
+                signed in, MileTriage does not use it.
+              </li>
+              <li>Share your drives or locations with anyone else.</li>
+            </ul>
           </div>
         </div>
-      )}
+        <p className="muted">
+          You can review or withdraw any of this from{' '}
+          <a
+            className="link"
+            href="https://www.tesla.com/teslaaccount/account-settings/security"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Tesla account settings
+          </a>
+          . Revoking access stops new drives from arriving; the ones already
+          recorded stay here.
+        </p>
+      </div>
       <div className="actions">
         <Link className="btn" to="/triage">
           Go to weekly triage

@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  NotFoundException,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { TeslaApiService } from '../tesla/tesla-api.service';
@@ -76,53 +71,23 @@ export class VehiclesService {
         ...(mock && enabled
           ? { virtualKeyPaired: true, telemetryConfigured: true }
           : {}),
-        ...(!enabled ? { telemetryConfigured: false } : {}),
+        ...(enabled
+          ? // Poll on the next tick rather than waiting out an old schedule.
+            { nextPollAt: new Date(), pollFailures: 0 }
+          : {
+              telemetryConfigured: false,
+              // Drop the odometer baseline. Miles driven while untracked must not
+              // resurface as one huge drive when tracking is turned back on.
+              anchorOdometer: null,
+              anchorLat: null,
+              anchorLng: null,
+              anchorAt: null,
+              tripStartedAt: null,
+              nextPollAt: null,
+            }),
       },
     });
 
-    if (!mock && enabled) {
-      // Mark pairing required; real telemetry configure comes later.
-      const stub = this.tesla.configureTelemetryStub(vehicle.vin);
-      this.logger.warn(stub.message);
-    }
-
     return updated;
-  }
-
-  async markVirtualKeyPaired(userId: string, vehicleId: string) {
-    const vehicle = await this.prisma.vehicle.findFirst({
-      where: { id: vehicleId, userId },
-    });
-    if (!vehicle) throw new NotFoundException('Vehicle not found');
-    return this.prisma.vehicle.update({
-      where: { id: vehicleId },
-      data: { virtualKeyPaired: true },
-    });
-  }
-
-  async pairingInfo(userId: string, vehicleId: string) {
-    const vehicle = await this.prisma.vehicle.findFirst({
-      where: { id: vehicleId, userId },
-    });
-    if (!vehicle) throw new NotFoundException('Vehicle not found');
-    const domain = this.config.get<string>('TESLA_DOMAIN') ?? 'localhost';
-    const mock = this.config.get('AUTH_MODE') !== 'tesla';
-    if (!mock && (!domain || domain === 'localhost')) {
-      throw new ServiceUnavailableException(
-        'Set TESLA_DOMAIN to your public hostname before pairing',
-      );
-    }
-    const url = `https://tesla.com/_ak/${domain}`;
-    return {
-      vehicleId: vehicle.id,
-      vin: vehicle.vin,
-      displayName: vehicle.displayName,
-      pairingUrl: url,
-      virtualKeyPaired: vehicle.virtualKeyPaired,
-      telemetryConfigured: vehicle.telemetryConfigured,
-      note: mock
-        ? 'Demo mode — pairing link is illustrative until Tesla is configured'
-        : undefined,
-    };
   }
 }
