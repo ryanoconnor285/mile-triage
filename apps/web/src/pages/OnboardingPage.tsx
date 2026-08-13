@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { QRCodeSVG } from 'qrcode.react';
 import type { Vehicle } from '@mile-triage/shared';
 import { api } from '../api';
 
@@ -10,6 +11,7 @@ export function OnboardingPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const load = async () => {
     try {
@@ -45,7 +47,9 @@ export function OnboardingPage() {
       setNote(pairing.note ?? null);
     } catch {
       setPairingUrl(null);
-      setNote('Enable tracking saved. Pairing link needs TESLA_DOMAIN in live mode.');
+      setNote(
+        'Enable tracking saved. Pairing link needs TESLA_DOMAIN in live mode.',
+      );
     }
     await load();
   };
@@ -55,6 +59,17 @@ export function OnboardingPage() {
     await load();
   };
 
+  const copyPairingUrl = async () => {
+    if (!pairingUrl) return;
+    try {
+      await navigator.clipboard.writeText(pairingUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError('Could not copy — select the link and copy it manually.');
+    }
+  };
+
   return (
     <div className="page stack">
       <div>
@@ -62,8 +77,8 @@ export function OnboardingPage() {
           Choose vehicles
         </h1>
         <p className="muted">
-          Sync from Tesla (live mode), enable tracking, then pair the virtual
-          key.
+          Sync from Tesla, turn on tracking, then pair the virtual key so the
+          car can send drives.
         </p>
       </div>
       {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
@@ -77,25 +92,34 @@ export function OnboardingPage() {
           {syncing ? 'Syncing…' : 'Sync from Tesla'}
         </button>
       </div>
-      <div className="card-list">
+      <div className="vehicle-grid">
         {vehicles.map((v) => (
-          <div className="vehicle-card" key={v.id}>
-            <div>
+          <div className="vehicle-tile" key={v.id}>
+            <div className="vehicle-tile-head">
               <strong>{v.displayName ?? v.vin}</strong>
-              <div className="muted">{v.vin}</div>
-              <div className="muted">
-                {v.trackingEnabled ? 'Tracking on' : 'Not tracking'}
-                {v.virtualKeyPaired ? ' · key paired' : ' · key not paired'}
-                {v.telemetryConfigured ? ' · telemetry ready' : ''}
-              </div>
+              <span className="vin">{v.vin}</span>
             </div>
-            <div className="actions">
-              <button className="btn" onClick={() => void enable(v.id)}>
-                {v.trackingEnabled ? 'Enabled' : 'Track'}
+            <div className="chips">
+              <span className={`chip ${v.trackingEnabled ? 'on' : ''}`}>
+                {v.trackingEnabled ? 'Tracking on' : 'Not tracking'}
+              </span>
+              <span className={`chip ${v.virtualKeyPaired ? 'on' : ''}`}>
+                {v.virtualKeyPaired ? 'Key paired' : 'Key not paired'}
+              </span>
+              {v.telemetryConfigured && (
+                <span className="chip on">Telemetry ready</span>
+              )}
+            </div>
+            <div className="vehicle-tile-actions">
+              <button
+                className={`btn ${v.trackingEnabled ? 'secondary' : ''}`}
+                onClick={() => void enable(v.id)}
+              >
+                {v.trackingEnabled ? 'Tracking' : 'Track this car'}
               </button>
               {v.trackingEnabled && !v.virtualKeyPaired && (
                 <button
-                  className="btn secondary"
+                  className="btn ghost"
                   onClick={() => void markPaired(v.id)}
                 >
                   Mark paired
@@ -106,15 +130,41 @@ export function OnboardingPage() {
         ))}
       </div>
       {pairingUrl && (
-        <div className="stat">
-          <span className="muted">Virtual key pairing</span>
-          <p>
-            Open this link on a phone with the Tesla app:{' '}
-            <a href={pairingUrl} target="_blank" rel="noreferrer">
-              {pairingUrl}
-            </a>
-          </p>
-          {note && <p className="muted">{note}</p>}
+        <div className="pairing">
+          <div className="pairing-copy">
+            <h2 className="pairing-title">Pair the virtual key</h2>
+            <p className="muted">
+              Scan this with your phone camera, or open the link on a phone that
+              has the Tesla app installed and is signed in to the same account.
+            </p>
+            <div className="actions">
+              <a
+                className="btn"
+                href={pairingUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open in Tesla app
+              </a>
+              <button
+                className="btn ghost"
+                onClick={() => void copyPairingUrl()}
+              >
+                {copied ? 'Copied' : 'Copy link'}
+              </button>
+            </div>
+            <p className="pairing-url">{pairingUrl}</p>
+            {note && <p className="muted">{note}</p>}
+          </div>
+          <div className="qr">
+            <QRCodeSVG
+              value={pairingUrl}
+              size={160}
+              bgColor="#ffffff"
+              fgColor="#0f172a"
+              marginSize={2}
+            />
+          </div>
         </div>
       )}
       <div className="actions">
