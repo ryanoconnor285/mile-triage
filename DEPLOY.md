@@ -28,6 +28,7 @@ GitHub = Railway builds from this repo using our Dockerfiles.
 
 1. In the project: **Add Service → Database → PostgreSQL**
 2. Keep it running (do **not** enable sleep/serverless).
+3. **Use the same region** as api and web (Railway private networking only works within one region).
 
 ### API service
 
@@ -42,7 +43,7 @@ GitHub = Railway builds from this repo using our Dockerfiles.
 | Variable | Value |
 |----------|--------|
 | `DATABASE_URL` | Use Railway’s Postgres variable reference (e.g. `${{Postgres.DATABASE_URL}}`) |
-| `PORT` | `3001` |
+| `PORT` | Leave unset so Railway injects it, **or** set `3001` and use port `3001` when generating the public domain |
 | `AUTH_MODE` | `mock` (until Tesla is ready) |
 | `WEB_ORIGIN` | your public web URL, e.g. `https://web-production-xxxx.up.railway.app` (update after web is live) |
 | `TOKEN_ENCRYPTION_KEY` | long random string |

@@ -15,7 +15,7 @@ async function bootstrap() {
   });
 
   const port = Number(config.get('PORT') ?? 3001);
-  await app.listen(port);
-  console.log(`MileTriage API listening on http://localhost:${port}`);
+  await app.listen(port, '0.0.0.0');
+  console.log(`MileTriage API listening on 0.0.0.0:${port}`);
 }
 bootstrap();
