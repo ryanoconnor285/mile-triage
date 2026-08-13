@@ -10,6 +10,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
 import { randomBytes } from 'crypto';
+import { webOriginFromEnv } from '../common/web-origin';
 import { AuthService } from './auth.service';
 
 @Controller('auth')
@@ -55,8 +56,7 @@ export class AuthController {
     const { token, expiresAt } = await this.auth.handleTeslaCallback(code);
     this.setSessionCookie(res, token, expiresAt);
     res.clearCookie('mile_oauth_state');
-    const webOrigin =
-      this.config.get<string>('WEB_ORIGIN') ?? 'http://localhost:5173';
+    const webOrigin = webOriginFromEnv(this.config.get<string>('WEB_ORIGIN'));
     return res.redirect(`${webOrigin}/onboarding`);
   }
 
@@ -64,8 +64,7 @@ export class AuthController {
   async mockLogin(@Res() res: Response) {
     const { token, expiresAt } = await this.auth.loginWithMock();
     this.setSessionCookie(res, token, expiresAt);
-    const webOrigin =
-      this.config.get<string>('WEB_ORIGIN') ?? 'http://localhost:5173';
+    const webOrigin = webOriginFromEnv(this.config.get<string>('WEB_ORIGIN'));
     return res.redirect(`${webOrigin}/triage`);
   }
 

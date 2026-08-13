@@ -43,9 +43,9 @@ GitHub = Railway builds from this repo using our Dockerfiles.
 | Variable | Value |
 |----------|--------|
 | `DATABASE_URL` | Use Railway’s Postgres variable reference (e.g. `${{Postgres.DATABASE_URL}}`) |
-| `PORT` | Leave unset so Railway injects it, **or** set `3001` and use port `3001` when generating the public domain |
+| `PORT` | Leave unset (Railway sets it, often `8080`) or set `3001` — **must match** the port in web’s `API_UPSTREAM` |
 | `AUTH_MODE` | `mock` (until Tesla is ready) |
-| `WEB_ORIGIN` | your public web URL, e.g. `https://web-production-xxxx.up.railway.app` (update after web is live) |
+| `WEB_ORIGIN` | your public web URL, e.g. `https://web-production-xxxx.up.railway.app` (no quotes, no trailing slash) |
 | `TOKEN_ENCRYPTION_KEY` | long random string |
 | `INTERNAL_TELEMETRY_SECRET` | long random string |
 | `SESSION_SECRET` | long random string |
@@ -64,7 +64,8 @@ GitHub = Railway builds from this repo using our Dockerfiles.
 | Variable | Value |
 |----------|--------|
 | `PORT` | `80` (must match the port you chose when generating the public domain) |
-| `API_UPSTREAM` | Private API URL, typically `http://api.railway.internal:3001` (service name must match; check Railway private networking hostname) |
+| `API_UPSTREAM` | Private API URL, e.g. `http://api.railway.internal:8080` — **port must match api’s `PORT`** (check api deploy logs for `listening on 0.0.0.0:XXXX`) |
+| `API_PROXY_HOST` | Hostname only, e.g. `api.railway.internal` or your public api domain |
 
 4. Generate a **public domain** for `web` — when Railway asks for the port, enter **`80`** (or `${{PORT}}` if shown; nginx listens on Railway’s `PORT`).
 5. Go back to API and set `WEB_ORIGIN` to that web HTTPS URL.
