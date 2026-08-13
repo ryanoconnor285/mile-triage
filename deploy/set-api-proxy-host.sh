@@ -1,6 +1,12 @@
 #!/bin/sh
 set -eu
 
-# Derive Host header from API_UPSTREAM so public and private URLs both work.
+: "${API_UPSTREAM:?API_UPSTREAM is required on the web service}"
+
+PORT="${PORT:-80}"
 API_PROXY_HOST=$(printf '%s' "${API_UPSTREAM}" | sed -E 's|^[a-zA-Z]+://([^/:]+).*|\1|')
-export API_PROXY_HOST
+export PORT API_UPSTREAM API_PROXY_HOST
+
+envsubst '${PORT} ${API_UPSTREAM} ${API_PROXY_HOST}' \
+  < /etc/miletriage/nginx.conf.template \
+  > /etc/nginx/conf.d/default.conf
