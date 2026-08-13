@@ -41,16 +41,20 @@ export function TriagePage() {
   const [loading, setLoading] = useState(true);
   const [simulating, setSimulating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Left null until known so the demo-only control never flashes for real users.
+  const [authMode, setAuthMode] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
     try {
-      const [list, cats] = await Promise.all([
+      const [list, cats, mode] = await Promise.all([
         api.drives({ status: 'UNCLASSIFIED' }),
         api.categories(),
+        api.authMode(),
       ]);
       setDrives(list);
       setCategories(cats);
+      setAuthMode(mode.mode);
       setDrafts((prev) => {
         const next: Record<string, Draft> = {};
         for (const d of list) {
@@ -183,13 +187,15 @@ export function TriagePage() {
               </div>
             </div>
             <div className="actions">
-              <button
-                className="btn ghost"
-                disabled={simulating}
-                onClick={() => void simulate()}
-              >
-                {simulating ? 'Simulating…' : 'Simulate drive'}
-              </button>
+              {authMode === 'mock' && (
+                <button
+                  className="btn ghost"
+                  disabled={simulating}
+                  onClick={() => void simulate()}
+                >
+                  {simulating ? 'Simulating…' : 'Simulate drive'}
+                </button>
+              )}
               <Link className="btn ghost" to="/categories">
                 Categories
               </Link>
@@ -218,7 +224,9 @@ export function TriagePage() {
             {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
             {!loading && !drives.length && (
               <p className="muted">
-                Inbox zero. Use “Simulate drive” to add a demo trip.
+                {authMode === 'mock'
+                  ? 'Inbox zero. Use “Simulate drive” to add a demo trip.'
+                  : 'Inbox zero. New drives show up here once your car finishes a trip.'}
               </p>
             )}
             {weekGroups.map((group) => (
