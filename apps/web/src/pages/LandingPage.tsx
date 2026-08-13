@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 
 export function LandingPage() {
+  const navigate = useNavigate();
   const [mode, setMode] = useState<'mock' | 'tesla' | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     void api
@@ -10,6 +13,20 @@ export function LandingPage() {
       .then((r) => setMode(r.mode === 'tesla' ? 'tesla' : 'mock'))
       .catch(() => setMode('mock'));
   }, []);
+
+  const continueDemo = async () => {
+    setBusy(true);
+    try {
+      await api.mockLogin();
+      navigate('/triage');
+    } catch {
+      window.alert(
+        'Demo login failed. Check that web can reach the API (/api/health).',
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="hero">
@@ -23,9 +40,14 @@ export function LandingPage() {
           drives on a map — no phone GPS drain, no forgotten trips.
         </p>
         <div className="actions">
-          <a className="btn" href="/api/auth/mock">
-            Continue with demo
-          </a>
+          <button
+            className="btn"
+            type="button"
+            disabled={busy}
+            onClick={() => void continueDemo()}
+          >
+            {busy ? 'Signing in…' : 'Continue with demo'}
+          </button>
           {mode === 'tesla' ? (
             <a className="btn secondary" href="/api/auth/tesla">
               Connect Tesla

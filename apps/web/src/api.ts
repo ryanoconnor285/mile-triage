@@ -41,6 +41,8 @@ export type SetupStatus = {
 
 export const api = {
   me: () => request<User>('/me'),
+  mockLogin: () =>
+    request<{ ok: boolean }>('/auth/mock?json=1'),
   authMode: () => request<{ mode: string }>('/auth/mode'),
   logout: () => request<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
   setupStatus: () => request<SetupStatus>('/setup/status'),

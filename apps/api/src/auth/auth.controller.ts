@@ -26,18 +26,18 @@ export class AuthController {
   }
 
   @Get('tesla')
-  async startTesla(@Res() res: Response) {
+  async startTesla(@Req() req: Request, @Res() res: Response) {
     // In mock/dev mode there is no Tesla app yet — log in as demo user.
-    // Do not redirect to a relative /auth/mock path: via the Vite proxy that
-    // lands on the web origin and shows a blank page.
     if (this.auth.getAuthMode() === 'mock') {
-      return this.mockLogin(res);
+      return this.mockLogin(req, res);
     }
     const state = randomBytes(16).toString('hex');
     res.cookie('mile_oauth_state', state, {
       httpOnly: true,
       sameSite: 'lax',
       maxAge: 10 * 60 * 1000,
+      path: '/',
+      secure: this.isSecureRequest(req),
     });
     return res.redirect(this.auth.getTeslaAuthorizeUrl(state));
   }
@@ -54,16 +54,23 @@ export class AuthController {
       throw new UnauthorizedException('Invalid OAuth state');
     }
     const { token, expiresAt } = await this.auth.handleTeslaCallback(code);
-    this.setSessionCookie(res, token, expiresAt);
-    res.clearCookie('mile_oauth_state');
+    this.setSessionCookie(req, res, token, expiresAt);
+    res.clearCookie('mile_oauth_state', { path: '/' });
     const webOrigin = webOriginFromEnv(this.config.get<string>('WEB_ORIGIN'));
     return res.redirect(`${webOrigin}/onboarding`);
   }
 
   @Get('mock')
-  async mockLogin(@Res() res: Response) {
+  async mockLogin(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('json') json?: string,
+  ) {
     const { token, expiresAt } = await this.auth.loginWithMock();
-    this.setSessionCookie(res, token, expiresAt);
+    this.setSessionCookie(req, res, token, expiresAt);
+    if (json === '1') {
+      return res.json({ ok: true });
+    }
     const webOrigin = webOriginFromEnv(this.config.get<string>('WEB_ORIGIN'));
     return res.redirect(`${webOrigin}/triage`);
   }
@@ -74,15 +81,30 @@ export class AuthController {
     res.clearCookie(this.auth.cookieName, {
       httpOnly: true,
       sameSite: 'lax',
+      path: '/',
+      secure: this.isSecureRequest(req),
     });
     return { ok: true };
   }
 
-  private setSessionCookie(res: Response, token: string, expiresAt: Date) {
+  private isSecureRequest(req: Request): boolean {
+    if (process.env.NODE_ENV !== 'production') return false;
+    if (req.secure) return true;
+    const proto = req.headers['x-forwarded-proto'];
+    const value = Array.isArray(proto) ? proto[0] : proto;
+    return value?.split(',')[0]?.trim() === 'https';
+  }
+
+  private setSessionCookie(
+    req: Request,
+    res: Response,
+    token: string,
+    expiresAt: Date,
+  ) {
     res.cookie(this.auth.cookieName, token, {
       httpOnly: true,
       sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      secure: this.isSecureRequest(req),
       path: '/',
       expires: expiresAt,
     });
