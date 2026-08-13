@@ -165,6 +165,10 @@ export class AuthService {
       redirect_uri: redirectUri,
       scope: scopes,
       state,
+      // Tesla otherwise reuses an account's existing consent and reissues the
+      // old scope set, so signing in again after enabling a scope would keep
+      // handing back a token without it.
+      prompt_missing_scopes: 'true',
     });
     return `${authUrl}?${params.toString()}`;
   }
