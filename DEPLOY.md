@@ -64,7 +64,9 @@ GitHub = Railway builds from this repo using our Dockerfiles.
 | Variable | Value |
 |----------|--------|
 | `PORT` | `80` (must match the port you chose when generating the public domain) |
-| `API_UPSTREAM` | Api base URL — **public recommended:** `https://YOUR-API-DOMAIN.up.railway.app` (no `/api` suffix). Internal alternative: `http://SERVICE-NAME.railway.internal:8080` (port from api logs) |
+| `API_UPSTREAM` | **Required on web.** Api base URL — public: `https://YOUR-API-DOMAIN.up.railway.app` (recommended). Internal: `http://SERVICE-NAME.railway.internal:8080`. Set as a plain string, not a reference, unless private networking is confirmed working. |
+
+**If `API_UPSTREAM` keeps reverting:** Railway may auto-set it when services are linked. Delete the variable, redeploy, then add your value again as a **raw string** (not `{api...}` reference). Do not bake this in the Dockerfile — it must live in Railway web service variables only.
 
 4. Generate a **public domain** for `web` — when Railway asks for the port, enter **`80`** (or `${{PORT}}` if shown; nginx listens on Railway’s `PORT`).
 5. Go back to API and set `WEB_ORIGIN` to that web HTTPS URL.
