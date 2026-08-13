@@ -64,8 +64,7 @@ GitHub = Railway builds from this repo using our Dockerfiles.
 | Variable | Value |
 |----------|--------|
 | `PORT` | `80` (must match the port you chose when generating the public domain) |
-| `API_UPSTREAM` | Private API URL, e.g. `http://api.railway.internal:8080` — **port must match api’s `PORT`** (check api deploy logs for `listening on 0.0.0.0:XXXX`) |
-| `API_PROXY_HOST` | Hostname only, e.g. `api.railway.internal` or your public api domain |
+| `API_UPSTREAM` | Api base URL — **public recommended:** `https://YOUR-API-DOMAIN.up.railway.app` (no `/api` suffix). Internal alternative: `http://SERVICE-NAME.railway.internal:8080` (port from api logs) |
 
 4. Generate a **public domain** for `web` — when Railway asks for the port, enter **`80`** (or `${{PORT}}` if shown; nginx listens on Railway’s `PORT`).
 5. Go back to API and set `WEB_ORIGIN` to that web HTTPS URL.
