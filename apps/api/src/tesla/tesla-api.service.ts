@@ -151,6 +151,24 @@ export class TeslaApiService {
     return fallback;
   }
 
+  /**
+   * Tesla only grants scopes the app is registered for, silently dropping the
+   * rest, so the scopes actually present on the token are what distinguish an
+   * unconfigured app from a stale consent.
+   */
+  private grantedScopes(accessToken: string): string | null {
+    try {
+      const payload = JSON.parse(
+        Buffer.from(accessToken.split('.')[1], 'base64url').toString('utf8'),
+      ) as { scp?: string[] | string };
+      const scp = payload.scp;
+      if (Array.isArray(scp)) return scp.join(' ');
+      return typeof scp === 'string' ? scp : null;
+    } catch {
+      return null;
+    }
+  }
+
   /** Tesla nests the useful text differently per endpoint; dig it out. */
   private async failureDetail(res: Response): Promise<string> {
     const text = (await res.text()).trim();
@@ -209,8 +227,11 @@ export class TeslaApiService {
         );
       }
       if (res.status === 403) {
+        const granted = this.grantedScopes(accessToken);
         throw new ServiceUnavailableException(
-          `Tesla denied access to your vehicles, which usually means the app is missing the "Vehicle Information" scope. Details: ${detail}`,
+          `Tesla denied access to your vehicles. This login granted ${
+            granted ? `"${granted}"` : 'no readable scopes'
+          }, but listing vehicles needs vehicle_device_data. Enable "Vehicle Information" on your app at developer.tesla.com, then log out and reconnect. Details: ${detail}`,
         );
       }
       throw new ServiceUnavailableException(
