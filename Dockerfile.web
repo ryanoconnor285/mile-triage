@@ -14,5 +14,5 @@ COPY deploy/set-api-proxy-host.sh /docker-entrypoint.d/05-set-api-proxy-host.sh
 RUN chmod +x /docker-entrypoint.d/05-set-api-proxy-host.sh
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 ENV PORT=80
-ENV API_UPSTREAM=https://mile-triage-production.up.railway.app
+ENV API_UPSTREAM=http://api.railway.internal:8080
 EXPOSE 80
