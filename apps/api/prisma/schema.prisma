@@ -142,6 +142,20 @@ model DrivePoint {
   @@index([driveId, recordedAt])
 }
 
+/**
+ * Reverse-geocode results keyed by coordinates rounded to ~11 m, so repeat trips
+ * to the same driveway cost one lookup ever. Nominatim asks callers to cache.
+ */
+model GeocodeCache {
+  id        String   @id @default(cuid())
+  lat       Float
+  lng       Float
+  label     String
+  createdAt DateTime @default(now())
+
+  @@unique([lat, lng])
+}
+
 model AppSettings {
   id           String @id @default(cuid())
   userId       String @unique

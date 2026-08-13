@@ -6,6 +6,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CategoriesModule } from './categories/categories.module';
 import { DrivesModule } from './drives/drives.module';
+import { GeocodeModule } from './geocode/geocode.module';
 import { PollingModule } from './polling/polling.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ReportsModule } from './reports/reports.module';
@@ -28,6 +29,7 @@ import { VehiclesModule } from './vehicles/vehicles.module';
     CategoriesModule,
     DrivesModule,
     TelemetryModule,
+    GeocodeModule,
     PollingModule,
     SettingsModule,
     ReportsModule,

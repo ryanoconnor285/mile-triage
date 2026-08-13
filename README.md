@@ -86,6 +86,21 @@ recorded when departure was actually observed. Consecutive trips are split at
 each stop the poller happens to see. Set `TESLA_POLLING_ENABLED=false` to
 disable.
 
+### Addresses
+
+Trip endpoints are reverse geocoded through [Nominatim](https://nominatim.org/)
+into short labels like `County Theater, Doylestown` or `159 Cardinal Road,
+Chalfont`, preferring a business name over a street number since that is what
+identifies a destination in a mileage log.
+
+Drives are written with a coordinate placeholder first so a slow geocoder never
+costs a trip, and a background job upgrades those placeholders — which also
+backfills drives recorded before this existed. Hand-entered addresses are never
+overwritten. Results are cached permanently by coordinate, and requests are
+serialised to one per second to respect Nominatim's usage policy; at real volume,
+self-host and set `NOMINATIM_URL`. Set `GEOCODE_ENABLED=false` to keep
+coordinates.
+
 ## Telemetry ingest (dev)
 
 ```bash

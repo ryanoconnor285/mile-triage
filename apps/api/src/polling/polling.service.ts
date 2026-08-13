@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { GeocodeService } from '../geocode/geocode.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TeslaApiService } from '../tesla/tesla-api.service';
 import { decide, type DetectedDrive, type PollState } from './park-detection';
@@ -33,6 +34,7 @@ export class PollingService {
     private readonly prisma: PrismaService,
     private readonly tesla: TeslaApiService,
     private readonly config: ConfigService,
+    private readonly geocode: GeocodeService,
   ) {}
 
   private enabled(): boolean {
@@ -173,6 +175,13 @@ export class PollingService {
     });
     if (existing) return false;
 
+    // A slow or failed geocoder must never cost us the drive, so fall back to
+    // coordinates; the backfill job upgrades them later.
+    const [startAddress, endAddress] = await Promise.all([
+      this.describe(drive.startLat, drive.startLng, 'Start'),
+      this.describe(drive.endLat, drive.endLng, 'End'),
+    ]);
+
     await this.prisma.drive.create({
       data: {
         userId: vehicle.userId,
@@ -189,11 +198,21 @@ export class PollingService {
         startLng: drive.startLng,
         endLat: drive.endLat,
         endLng: drive.endLng,
-        startAddress: coordLabel(drive.startLat, drive.startLng, 'Start'),
-        endAddress: coordLabel(drive.endLat, drive.endLng, 'End'),
+        startAddress,
+        endAddress,
       },
     });
     return true;
+  }
+
+  private async describe(
+    lat: number | null,
+    lng: number | null,
+    label: string,
+  ): Promise<string | null> {
+    if (lat == null || lng == null) return null;
+    const resolved = await this.geocode.reverse(lat, lng);
+    return resolved ?? coordLabel(lat, lng, label);
   }
 }
 
