@@ -64,7 +64,7 @@ GitHub = Railway builds from this repo using our Dockerfiles.
 |----------|--------|
 | `API_UPSTREAM` | Private API URL, typically `http://api.railway.internal:3001` (service name must match; check Railway private networking hostname) |
 
-4. Generate a **public domain** for `web`.
+4. Generate a **public domain** for `web` — when Railway asks for the port, enter **`80`** (or `${{PORT}}` if shown; nginx listens on Railway’s `PORT`).
 5. Go back to API and set `WEB_ORIGIN` to that web HTTPS URL.
 6. Disable sleep on web too (optional but fine).
 
