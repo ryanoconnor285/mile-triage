@@ -12,5 +12,6 @@ FROM nginx:1.27-alpine
 COPY deploy/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 ENV PORT=80
-ENV API_UPSTREAM=http://api:3001
+ENV API_UPSTREAM=http://api.railway.internal:3001
+ENV API_PROXY_HOST=api.railway.internal
 EXPOSE 80
