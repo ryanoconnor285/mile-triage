@@ -71,6 +71,19 @@ input {
   font-weight: 600;
   letter-spacing: -0.02em;
   font-size: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.brand-mark {
+  width: 1.5em;
+  height: 1.5em;
+  display: block;
+}
+
+.brand-lg {
+  font-size: 1.75rem;
 }
 
 .nav {

@@ -31,6 +31,7 @@ function Shell() {
     <div className="app-shell">
       <header className="topbar">
         <NavLink to="/triage" className="brand">
+          <img className="brand-mark" src="/favicon.svg" alt="" />
           MileTriage
         </NavLink>
         <nav className="nav">

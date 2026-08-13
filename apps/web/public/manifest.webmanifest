@@ -1,0 +1,23 @@
+{
+  "name": "MileTriage",
+  "short_name": "MileTriage",
+  "description": "Triage Tesla drives into business and personal miles for tax and expense reporting.",
+  "start_url": "/triage",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "type": "image/png",
+      "sizes": "1600x1600",
+      "purpose": "any maskable"
+    }
+  ]
+}

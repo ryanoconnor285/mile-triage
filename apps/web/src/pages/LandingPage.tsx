@@ -31,7 +31,8 @@ export function LandingPage() {
   return (
     <div className="hero">
       <div className="hero-inner">
-        <div className="brand" style={{ marginBottom: '1.25rem' }}>
+        <div className="brand brand-lg" style={{ marginBottom: '1.25rem' }}>
+          <img className="brand-mark" src="/favicon.svg" alt="" />
           MileTriage
         </div>
         <h1>Weekly miles. Thirty seconds.</h1>
