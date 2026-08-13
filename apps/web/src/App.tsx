@@ -7,7 +7,6 @@ import { HistoryPage } from './pages/HistoryPage';
 import { LandingPage } from './pages/LandingPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { ReportsPage } from './pages/ReportsPage';
-import { SetupPage } from './pages/SetupPage';
 import { TriagePage } from './pages/TriagePage';
 
 function Shell() {
@@ -40,7 +39,6 @@ function Shell() {
           <NavLink to="/categories">Categories</NavLink>
           <NavLink to="/onboarding">Vehicles</NavLink>
           <NavLink to="/reports">Reports</NavLink>
-          <NavLink to="/setup">Setup</NavLink>
           <button
             className="btn ghost"
             onClick={() =>
@@ -68,7 +66,6 @@ export default function App() {
         <Route path="/categories" element={<CategoriesPage />} />
         <Route path="/onboarding" element={<OnboardingPage />} />
         <Route path="/reports" element={<ReportsPage />} />
-        <Route path="/setup" element={<SetupPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

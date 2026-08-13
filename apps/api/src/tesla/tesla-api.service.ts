@@ -20,6 +20,7 @@ export type TeslaVehicleDto = {
 @Injectable()
 export class TeslaApiService {
   private readonly logger = new Logger(TeslaApiService.name);
+  private readonly regionCache = new Map<string, string>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -97,6 +98,76 @@ export class TeslaApiService {
     return tokens.access_token;
   }
 
+  private configuredApiBase(): string {
+    return (
+      this.config.get<string>('TESLA_API_BASE') ?? DEFAULT_TESLA_API_BASE
+    ).replace(/\/+$/, '');
+  }
+
+  /**
+   * Fleet API is partitioned by region and rejects accounts queried through the
+   * wrong base URL, so let the account tell us where it lives rather than
+   * assuming the configured default is right.
+   */
+  private async resolveApiBase(
+    userId: string,
+    accessToken: string,
+  ): Promise<string> {
+    const cached = this.regionCache.get(userId);
+    if (cached) return cached;
+
+    const fallback = this.configuredApiBase();
+    try {
+      const res = await fetch(`${fallback}/api/1/users/region`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+        },
+      });
+      if (res.ok) {
+        const json = (await res.json()) as {
+          response?: { fleet_api_base_url?: string };
+        };
+        const base = json.response?.fleet_api_base_url?.replace(/\/+$/, '');
+        if (base) {
+          if (base !== fallback) {
+            this.logger.log(`Tesla account region resolved to ${base}`);
+          }
+          this.regionCache.set(userId, base);
+          return base;
+        }
+      } else {
+        this.logger.warn(
+          `Tesla region lookup failed (${res.status}): ${await res.text()}`,
+        );
+      }
+    } catch (err) {
+      this.logger.warn(`Tesla region lookup errored: ${String(err)}`);
+    }
+
+    return fallback;
+  }
+
+  /** Tesla nests the useful text differently per endpoint; dig it out. */
+  private async failureDetail(res: Response): Promise<string> {
+    const text = (await res.text()).trim();
+    try {
+      const json = JSON.parse(text) as {
+        error?: string;
+        error_description?: string;
+        messages?: unknown;
+      };
+      return (
+        json.error_description ||
+        json.error ||
+        (json.messages ? JSON.stringify(json.messages) : '') ||
+        text
+      );
+    } catch {
+      return text;
+    }
+  }
+
   async listVehicles(userId: string): Promise<TeslaVehicleDto[]> {
     if (this.config.get('AUTH_MODE') !== 'tesla') {
       throw new ServiceUnavailableException(
@@ -108,16 +179,38 @@ export class TeslaApiService {
     }
 
     const accessToken = await this.getAccessToken(userId);
-    const base =
-      this.config.get<string>('TESLA_API_BASE') ?? DEFAULT_TESLA_API_BASE;
+    const base = await this.resolveApiBase(userId, accessToken);
 
     const res = await fetch(`${base}/api/1/vehicles`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
     });
+
     if (!res.ok) {
-      const text = await res.text();
-      this.logger.error(`Tesla vehicles list failed: ${text}`);
-      throw new ServiceUnavailableException('Failed to list Tesla vehicles');
+      const detail = await this.failureDetail(res);
+      this.logger.error(`Tesla vehicles list failed (${res.status}): ${detail}`);
+
+      // A stale cached region survives past its usefulness; drop it so the next
+      // attempt re-discovers instead of failing the same way forever.
+      if (res.status === 412 || res.status === 421) {
+        this.regionCache.delete(userId);
+      }
+
+      if (res.status === 401) {
+        throw new UnauthorizedException(
+          'Tesla rejected the saved token. Log out and reconnect Tesla.',
+        );
+      }
+      if (res.status === 403) {
+        throw new ServiceUnavailableException(
+          `Tesla denied access to your vehicles, which usually means the app is missing the "Vehicle Information" scope. Details: ${detail}`,
+        );
+      }
+      throw new ServiceUnavailableException(
+        `Tesla vehicle list failed (${res.status}): ${detail}`,
+      );
     }
 
     const json = (await res.json()) as {

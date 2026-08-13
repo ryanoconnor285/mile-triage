@@ -31,21 +31,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return undefined as T;
 }
 
-export type SetupStatus = {
-  authMode: string;
-  pairingUrl: string | null;
-  publicKeyUrl: string;
-  readyForTeslaOauth: boolean;
-  checks: Array<{ id: string; label: string; ok: boolean; detail: string }>;
-};
-
 export const api = {
   me: () => request<User>('/me'),
   mockLogin: () =>
     request<{ ok: boolean }>('/auth/mock?json=1'),
   authMode: () => request<{ mode: string }>('/auth/mode'),
   logout: () => request<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
-  setupStatus: () => request<SetupStatus>('/setup/status'),
   vehicles: () => request<Vehicle[]>('/vehicles'),
   syncVehicles: () =>
     request<{

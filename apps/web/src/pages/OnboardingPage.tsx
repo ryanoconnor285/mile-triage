@@ -76,9 +76,6 @@ export function OnboardingPage() {
         >
           {syncing ? 'Syncing…' : 'Sync from Tesla'}
         </button>
-        <Link className="btn ghost" to="/setup">
-          Tesla setup checklist
-        </Link>
       </div>
       <div className="card-list">
         {vehicles.map((v) => (
