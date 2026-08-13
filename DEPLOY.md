@@ -63,6 +63,7 @@ GitHub = Railway builds from this repo using our Dockerfiles.
 
 | Variable | Value |
 |----------|--------|
+| `PORT` | `80` (must match the port you chose when generating the public domain) |
 | `API_UPSTREAM` | Private API URL, typically `http://api.railway.internal:3001` (service name must match; check Railway private networking hostname) |
 
 4. Generate a **public domain** for `web` — when Railway asks for the port, enter **`80`** (or `${{PORT}}` if shown; nginx listens on Railway’s `PORT`).

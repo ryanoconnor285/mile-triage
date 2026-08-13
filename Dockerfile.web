@@ -9,11 +9,8 @@ RUN npm run build --workspace=@mile-triage/shared \
   && npm run build --workspace=@mile-triage/web
 
 FROM nginx:1.27-alpine
-RUN apk add --no-cache gettext
 COPY deploy/nginx.conf.template /etc/nginx/templates/default.conf.template
-COPY deploy/web-entrypoint.sh /docker-entrypoint-web.sh
-RUN chmod +x /docker-entrypoint-web.sh
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
+ENV PORT=80
 ENV API_UPSTREAM=http://api:3001
 EXPOSE 80
-CMD ["/docker-entrypoint-web.sh"]
