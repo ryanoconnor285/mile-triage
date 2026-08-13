@@ -13,6 +13,11 @@ enum DriveStatus {
   PERSONAL
 }
 
+enum DriveSource {
+  TELEMETRY
+  MANUAL
+}
+
 model User {
   id                    String       @id @default(cuid())
   teslaUserId           String       @unique
@@ -77,13 +82,15 @@ model Drive {
   id             String       @id @default(cuid())
   userId         String
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  vehicleId      String
-  vehicle        Vehicle      @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  // Null for hand-entered drives, which need no car and no odometer reading.
+  vehicleId      String?
+  vehicle        Vehicle?     @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
   categoryId     String?
   category       Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  source         DriveSource  @default(TELEMETRY)
   startedAt      DateTime
   endedAt        DateTime?
-  startOdometer  Float
+  startOdometer  Float?
   endOdometer    Float?
   distanceMiles  Float?
   durationSec    Int?

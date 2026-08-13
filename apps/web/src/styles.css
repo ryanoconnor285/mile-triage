@@ -244,6 +244,23 @@ code {
   border-bottom: 1px solid var(--line);
 }
 
+.entry-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.6rem;
+}
+
+.entry-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.entry-wide {
+  grid-column: 1 / -1;
+}
+
 .purpose-input {
   width: 100%;
   background: var(--bg);

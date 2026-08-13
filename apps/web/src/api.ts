@@ -1,6 +1,7 @@
 import type {
   AppSettings,
   Category,
+  CreateDrive,
   DriveDetail,
   DriveSummary,
   ReportSummary,
@@ -9,6 +10,19 @@ import type {
 } from '@mile-triage/shared';
 
 const BASE = '/api';
+
+/** Nest sends errors as JSON; show the message rather than the envelope. */
+function errorMessage(body: string): string {
+  try {
+    const parsed = JSON.parse(body) as { message?: string | string[] };
+    const message = parsed.message;
+    if (Array.isArray(message)) return message.join('; ');
+    if (typeof message === 'string') return message;
+  } catch {
+    // Not JSON — fall through to the raw body.
+  }
+  return body;
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -21,7 +35,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || res.statusText);
+    throw new Error(errorMessage(text) || res.statusText);
   }
   if (res.status === 204) return undefined as T;
   const contentType = res.headers.get('content-type') ?? '';
@@ -79,6 +93,13 @@ export const api = {
     return request<DriveSummary[]>(`/drives${q}`);
   },
   drive: (id: string) => request<DriveDetail>(`/drives/${id}`),
+  createDrive: (data: CreateDrive) =>
+    request<DriveSummary>('/drives', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  deleteDrive: (id: string) =>
+    request<{ ok: boolean }>(`/drives/${id}`, { method: 'DELETE' }),
   updateDrive: (
     id: string,
     data: {

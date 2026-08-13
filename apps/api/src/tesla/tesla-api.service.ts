@@ -31,7 +31,7 @@ export class TeslaApiService {
   isConfigured(): boolean {
     return Boolean(
       this.config.get('TESLA_CLIENT_ID') &&
-        this.config.get('TESLA_CLIENT_SECRET'),
+      this.config.get('TESLA_CLIENT_SECRET'),
     );
   }
 
@@ -51,7 +51,10 @@ export class TeslaApiService {
       throw new UnauthorizedException('Tesla refresh token missing');
     }
 
-    return this.refreshTokens(userId, this.crypto.decrypt(user.refreshTokenEncrypted));
+    return this.refreshTokens(
+      userId,
+      this.crypto.decrypt(user.refreshTokenEncrypted),
+    );
   }
 
   async refreshTokens(userId: string, refreshToken: string): Promise<string> {
@@ -190,7 +193,9 @@ export class TeslaApiService {
 
     if (!res.ok) {
       const detail = await this.failureDetail(res);
-      this.logger.error(`Tesla vehicles list failed (${res.status}): ${detail}`);
+      this.logger.error(
+        `Tesla vehicles list failed (${res.status}): ${detail}`,
+      );
 
       // A stale cached region survives past its usefulness; drop it so the next
       // attempt re-discovers instead of failing the same way forever.
@@ -233,11 +238,11 @@ export class TeslaApiService {
    * Placeholder for Fleet Telemetry configure call.
    * Requires vehicle-command proxy + signed config in production.
    */
-  async configureTelemetryStub(vin: string): Promise<{
+  configureTelemetryStub(vin: string): {
     ok: boolean;
     message: string;
     vin: string;
-  }> {
+  } {
     return {
       ok: false,
       vin,

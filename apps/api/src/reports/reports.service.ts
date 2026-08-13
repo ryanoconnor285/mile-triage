@@ -8,7 +8,7 @@ type ExportRow = {
   vehicle: string;
   startAddress: string;
   endAddress: string;
-  startOdometer: number;
+  startOdometer: number | '';
   endOdometer: number | '';
   totalMiles: number;
   purpose: string;
@@ -44,8 +44,7 @@ export class ReportsService {
 
     for (const d of drives) {
       const miles = d.distanceMiles ?? 0;
-      const deductible =
-        d.category?.deductible ?? d.status === 'BUSINESS';
+      const deductible = d.category?.deductible ?? d.status === 'BUSINESS';
       if (!d.categoryId && d.status === 'UNCLASSIFIED') {
         unclassifiedMiles += miles;
       } else if (deductible) {
@@ -70,7 +69,11 @@ export class ReportsService {
     };
   }
 
-  async exportRows(userId: string, from: string, to: string): Promise<ExportRow[]> {
+  async exportRows(
+    userId: string,
+    from: string,
+    to: string,
+  ): Promise<ExportRow[]> {
     const settings = await this.settings.get(userId);
     const drives = await this.prisma.drive.findMany({
       where: {
@@ -87,10 +90,10 @@ export class ReportsService {
       const isBusiness = d.category?.deductible ?? d.status === 'BUSINESS';
       return {
         date: d.startedAt.toISOString().slice(0, 10),
-        vehicle: d.vehicle.displayName ?? d.vehicle.vin,
+        vehicle: d.vehicle?.displayName ?? d.vehicle?.vin ?? 'Manual entry',
         startAddress: d.startAddress ?? '',
         endAddress: d.endAddress ?? '',
-        startOdometer: d.startOdometer,
+        startOdometer: d.startOdometer ?? '',
         endOdometer: d.endOdometer ?? '',
         totalMiles: miles,
         purpose: d.category?.name ?? d.status,
@@ -161,9 +164,7 @@ export class ReportsService {
       doc
         .fontSize(10)
         .fillColor('#444')
-        .text(
-          `Period: ${meta.from.slice(0, 10)} → ${meta.to.slice(0, 10)}`,
-        )
+        .text(`Period: ${meta.from.slice(0, 10)} → ${meta.to.slice(0, 10)}`)
         .text(`Rate: $${meta.mileageRate.toFixed(2)} / mile`)
         .text(
           `Business miles: ${businessMiles.toFixed(1)} · Deduction: $${deduction.toFixed(2)}`,

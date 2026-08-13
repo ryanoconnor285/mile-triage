@@ -76,15 +76,13 @@ export class VehiclesService {
         ...(mock && enabled
           ? { virtualKeyPaired: true, telemetryConfigured: true }
           : {}),
-        ...(!enabled
-          ? { telemetryConfigured: false }
-          : {}),
+        ...(!enabled ? { telemetryConfigured: false } : {}),
       },
     });
 
     if (!mock && enabled) {
       // Mark pairing required; real telemetry configure comes later.
-      const stub = await this.tesla.configureTelemetryStub(vehicle.vin);
+      const stub = this.tesla.configureTelemetryStub(vehicle.vin);
       this.logger.warn(stub.message);
     }
 

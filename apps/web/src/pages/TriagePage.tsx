@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Category, DriveDetail, DriveSummary } from '@mile-triage/shared';
+import type {
+  Category,
+  DriveDetail,
+  DriveSummary,
+  Vehicle,
+} from '@mile-triage/shared';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { DriveMap } from '../components/DriveMap';
@@ -31,6 +36,23 @@ function weekLabel(start: Date) {
 
 type Draft = { purposeNote: string; notes: string };
 
+function todayLocal() {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 10);
+}
+
+const emptyEntry = () => ({
+  date: todayLocal(),
+  miles: '',
+  categoryId: '',
+  purposeNote: '',
+  startAddress: '',
+  endAddress: '',
+  vehicleId: '',
+});
+
 export function TriagePage() {
   const [drives, setDrives] = useState<DriveSummary[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -43,18 +65,24 @@ export function TriagePage() {
   const [error, setError] = useState<string | null>(null);
   // Left null until known so the demo-only control never flashes for real users.
   const [authMode, setAuthMode] = useState<string | null>(null);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [entryOpen, setEntryOpen] = useState(false);
+  const [entry, setEntry] = useState(emptyEntry);
+  const [savingEntry, setSavingEntry] = useState(false);
 
   const load = async () => {
     setLoading(true);
     try {
-      const [list, cats, mode] = await Promise.all([
+      const [list, cats, mode, cars] = await Promise.all([
         api.drives({ status: 'UNCLASSIFIED' }),
         api.categories(),
         api.authMode(),
+        api.vehicles(),
       ]);
       setDrives(list);
       setCategories(cats);
       setAuthMode(mode.mode);
+      setVehicles(cars);
       setDrafts((prev) => {
         const next: Record<string, Draft> = {};
         for (const d of list) {
@@ -162,6 +190,34 @@ export function TriagePage() {
     await load();
   };
 
+  const addDrive = async () => {
+    const miles = Number(entry.miles);
+    if (!Number.isFinite(miles) || miles <= 0) {
+      setError('Enter a distance greater than zero');
+      return;
+    }
+    setSavingEntry(true);
+    setError(null);
+    try {
+      await api.createDrive({
+        date: entry.date,
+        distanceMiles: miles,
+        categoryId: entry.categoryId || null,
+        vehicleId: entry.vehicleId || null,
+        purposeNote: entry.purposeNote.trim() || null,
+        startAddress: entry.startAddress.trim() || null,
+        endAddress: entry.endAddress.trim() || null,
+      });
+      setEntry(emptyEntry());
+      setEntryOpen(false);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not add drive');
+    } finally {
+      setSavingEntry(false);
+    }
+  };
+
   const simulate = async () => {
     setSimulating(true);
     setError(null);
@@ -187,6 +243,12 @@ export function TriagePage() {
               </div>
             </div>
             <div className="actions">
+              <button
+                className="btn ghost"
+                onClick={() => setEntryOpen((open) => !open)}
+              >
+                {entryOpen ? 'Cancel' : 'Add drive'}
+              </button>
               {authMode === 'mock' && (
                 <button
                   className="btn ghost"
@@ -201,6 +263,120 @@ export function TriagePage() {
               </Link>
             </div>
           </div>
+          {entryOpen && (
+            <div className="purpose-bar">
+              <div className="muted" style={{ marginBottom: '0.45rem' }}>
+                Add a drive by hand
+              </div>
+              <div className="entry-grid">
+                <label>
+                  <span className="muted">Date</span>
+                  <input
+                    className="purpose-input"
+                    type="date"
+                    max={todayLocal()}
+                    value={entry.date}
+                    onChange={(e) =>
+                      setEntry({ ...entry, date: e.target.value })
+                    }
+                  />
+                </label>
+                <label>
+                  <span className="muted">Miles</span>
+                  <input
+                    className="purpose-input"
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    inputMode="decimal"
+                    placeholder="12.4"
+                    value={entry.miles}
+                    onChange={(e) =>
+                      setEntry({ ...entry, miles: e.target.value })
+                    }
+                  />
+                </label>
+                <label>
+                  <span className="muted">Category</span>
+                  <select
+                    className="purpose-input"
+                    value={entry.categoryId}
+                    onChange={(e) =>
+                      setEntry({ ...entry, categoryId: e.target.value })
+                    }
+                  >
+                    <option value="">Decide later</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {vehicles.length > 0 && (
+                  <label>
+                    <span className="muted">Vehicle</span>
+                    <select
+                      className="purpose-input"
+                      value={entry.vehicleId}
+                      onChange={(e) =>
+                        setEntry({ ...entry, vehicleId: e.target.value })
+                      }
+                    >
+                      <option value="">No vehicle</option>
+                      {vehicles.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.displayName ?? v.vin}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <label>
+                  <span className="muted">From</span>
+                  <input
+                    className="purpose-input"
+                    placeholder="Optional"
+                    value={entry.startAddress}
+                    onChange={(e) =>
+                      setEntry({ ...entry, startAddress: e.target.value })
+                    }
+                  />
+                </label>
+                <label>
+                  <span className="muted">To</span>
+                  <input
+                    className="purpose-input"
+                    placeholder="Optional"
+                    value={entry.endAddress}
+                    onChange={(e) =>
+                      setEntry({ ...entry, endAddress: e.target.value })
+                    }
+                  />
+                </label>
+                <label className="entry-wide">
+                  <span className="muted">Purpose</span>
+                  <input
+                    className="purpose-input"
+                    placeholder="Client meeting, site visit…"
+                    value={entry.purposeNote}
+                    onChange={(e) =>
+                      setEntry({ ...entry, purposeNote: e.target.value })
+                    }
+                  />
+                </label>
+              </div>
+              <div className="actions" style={{ marginTop: '0.6rem' }}>
+                <button
+                  className="btn"
+                  disabled={savingEntry}
+                  onClick={() => void addDrive()}
+                >
+                  {savingEntry ? 'Saving…' : 'Save drive'}
+                </button>
+              </div>
+            </div>
+          )}
           {selectedIds.size > 0 && (
             <div className="purpose-bar">
               <div className="muted" style={{ marginBottom: '0.45rem' }}>

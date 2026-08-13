@@ -19,9 +19,7 @@ export class TelemetryService {
       where: { vin: event.vin, trackingEnabled: true },
     });
     if (!vehicle) {
-      throw new NotFoundException(
-        `No tracked vehicle for VIN ${event.vin}`,
-      );
+      throw new NotFoundException(`No tracked vehicle for VIN ${event.vin}`);
     }
 
     if (event.type === 'drive_start') {
@@ -41,7 +39,7 @@ export class TelemetryService {
     }
 
     const openDrive = await this.prisma.drive.findFirst({
-      where: { vehicleId: vehicle.id, endedAt: null },
+      where: { vehicleId: vehicle.id, endedAt: null, source: 'TELEMETRY' },
       orderBy: { startedAt: 'desc' },
     });
 
@@ -66,9 +64,12 @@ export class TelemetryService {
       return { type: event.type, skipped: true };
     }
     const endedAt = new Date(event.occurredAt);
-    const distanceMiles = Number(
-      (event.odometer - openDrive.startOdometer).toFixed(2),
-    );
+    // drive_start always records an odometer, so a null here means the row did
+    // not come from a normal start event and there is no baseline to subtract.
+    const distanceMiles =
+      openDrive.startOdometer === null
+        ? 0
+        : Number((event.odometer - openDrive.startOdometer).toFixed(2));
     const durationSec = Math.max(
       0,
       Math.round((endedAt.getTime() - openDrive.startedAt.getTime()) / 1000),

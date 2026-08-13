@@ -36,13 +36,17 @@ export const DrivePointSchema = z.object({
 });
 export type DrivePoint = z.infer<typeof DrivePointSchema>;
 
+export const DriveSourceSchema = z.enum(['TELEMETRY', 'MANUAL']);
+export type DriveSource = z.infer<typeof DriveSourceSchema>;
+
 export const DriveSummarySchema = z.object({
   id: z.string(),
-  vehicleId: z.string(),
+  vehicleId: z.string().nullable(),
   vehicleName: z.string().nullable().optional(),
+  source: DriveSourceSchema,
   startedAt: z.string().datetime(),
   endedAt: z.string().datetime().nullable(),
-  startOdometer: z.number(),
+  startOdometer: z.number().nullable(),
   endOdometer: z.number().nullable(),
   distanceMiles: z.number().nullable(),
   durationSec: z.number().nullable(),
@@ -65,6 +69,19 @@ export const DriveDetailSchema = DriveSummarySchema.extend({
   points: z.array(DrivePointSchema),
 });
 export type DriveDetail = z.infer<typeof DriveDetailSchema>;
+
+/** Hand-entered drives: an IRS mileage log needs a date, a distance, and a purpose. */
+export const CreateDriveSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD'),
+  distanceMiles: z.number().positive().max(10_000),
+  vehicleId: z.string().nullable().optional(),
+  categoryId: z.string().nullable().optional(),
+  purposeNote: z.string().max(500).optional().nullable(),
+  notes: z.string().max(2000).optional().nullable(),
+  startAddress: z.string().max(200).optional().nullable(),
+  endAddress: z.string().max(200).optional().nullable(),
+});
+export type CreateDrive = z.infer<typeof CreateDriveSchema>;
 
 export const ClassifyDriveSchema = z.object({
   categoryId: z.string().nullable().optional(),
