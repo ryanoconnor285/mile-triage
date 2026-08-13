@@ -99,9 +99,25 @@ App: `http://localhost:8080` (or your reverse proxy → port 8080)
 
 ## Your next steps for live Tesla
 
-1. Register app at [developer.tesla.com](https://developer.tesla.com/)
-2. Own a domain; serve public key at `/.well-known/appspecific/com.tesla.3p.public-key.pem`
-3. Add payment method + billing limit on Tesla developer portal
-4. Set `AUTH_MODE=tesla` and client credentials in Railway env
-5. Complete virtual key pairing
-6. (Next engineering task) Wire Fleet Telemetry configure → ingest
+Tesla requires a domain whose **root** (second-level + top-level) matches your
+app's allowed origins, so `*.up.railway.app` will not work — buy a domain and add
+it to the **web** service under Settings → Networking → Custom Domain.
+
+1. Point your domain at the **web** service and wait for the certificate to issue
+2. `npm run tesla:keys` locally (keep `private-key.pem` out of git)
+3. Register the app at [developer.tesla.com](https://developer.tesla.com/) with
+   allowed origin `YOUR_DOMAIN` and redirect URI
+   `https://YOUR_DOMAIN/api/auth/tesla/callback`; add a payment method + billing limit
+4. On the **api** service, set:
+   - `AUTH_MODE=tesla`
+   - `TESLA_CLIENT_ID` / `TESLA_CLIENT_SECRET`
+   - `TESLA_REDIRECT_URI=https://YOUR_DOMAIN/api/auth/tesla/callback`
+   - `TESLA_DOMAIN=YOUR_DOMAIN` (bare hostname)
+   - `TESLA_PUBLIC_KEY_PEM` = contents of `keys/public-key.pem`
+   - `WEB_ORIGIN=https://YOUR_DOMAIN`
+5. Verify `https://YOUR_DOMAIN/.well-known/appspecific/com.tesla.3p.public-key.pem`
+   returns the PEM
+6. `npm run tesla:register` (once per region; verifies the hosted key first)
+7. Sign in with **Connect Tesla**, then pair at `https://tesla.com/_ak/YOUR_DOMAIN`
+8. (Next engineering task) Wire Fleet Telemetry configure → ingest, otherwise no
+   drives arrive automatically

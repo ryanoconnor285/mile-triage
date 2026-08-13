@@ -42,18 +42,30 @@ On the triage page you can:
 
 ## Tesla mode
 
-1. Generate a key pair: `npm run tesla:keys`
-2. Host `keys/public-key.pem` at  
-   `https://YOUR_DOMAIN/.well-known/appspecific/com.tesla.3p.public-key.pem`  
-   (local API also serves this path once the file exists)
-3. Register the app at [developer.tesla.com](https://developer.tesla.com/)
-4. Set in `.env`:
-   - `AUTH_MODE=tesla`
-   - `TESLA_CLIENT_ID` / `TESLA_CLIENT_SECRET` / `TESLA_REDIRECT_URI`
-   - `TESLA_DOMAIN=your.domain`
-5. Open **Setup** in the app for a live checklist
+**A custom domain is required.** Tesla matches the registered domain against your
+app's `allowed_origins` at the root (second-level + top-level), so shared hosts
+like `*.up.railway.app` cannot be used — the root would be `railway.app`.
 
-Fleet Telemetry configure (vehicle → your always-on receiver) is still a follow-up step after OAuth + virtual key pairing.
+1. Generate a key pair: `npm run tesla:keys` (keep `private-key.pem` secret)
+2. Register the app at [developer.tesla.com](https://developer.tesla.com/):
+   - Allowed origin: your domain
+   - Redirect URI: `https://YOUR_DOMAIN/api/auth/tesla/callback`
+   - Add a payment method and a billing limit
+3. Set on the API (`.env` locally, Railway variables when deployed):
+   - `AUTH_MODE=tesla`
+   - `TESLA_CLIENT_ID` / `TESLA_CLIENT_SECRET`
+   - `TESLA_REDIRECT_URI=https://YOUR_DOMAIN/api/auth/tesla/callback`
+   - `TESLA_DOMAIN=YOUR_DOMAIN` (bare hostname, no `https://`)
+   - `TESLA_PUBLIC_KEY_PEM` — contents of `keys/public-key.pem`, needed when
+     deploying from an image that has no `keys/` directory
+4. Confirm the key is live at
+   `https://YOUR_DOMAIN/.well-known/appspecific/com.tesla.3p.public-key.pem`
+5. Register with Fleet API (once per region): `npm run tesla:register`
+6. Sign in via **Connect Tesla**, then pair the car at `https://tesla.com/_ak/YOUR_DOMAIN`
+7. Open **Setup** in the app for a live checklist
+
+Steps 1–6 give you login and vehicle sync. Drives still won't populate until
+Fleet Telemetry configure is wired — see `configureTelemetryStub`.
 
 ## Telemetry ingest (dev)
 

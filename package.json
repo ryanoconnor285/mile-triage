@@ -13,7 +13,8 @@
     "db:migrate": "npm run prisma:migrate --workspace=@mile-triage/api",
     "db:seed": "npm run prisma:seed --workspace=@mile-triage/api",
     "db:studio": "npm run prisma:studio --workspace=@mile-triage/api",
-    "tesla:keys": "bash scripts/generate-tesla-keys.sh"
+    "tesla:keys": "bash scripts/generate-tesla-keys.sh",
+    "tesla:register": "node scripts/tesla-register.mjs"
   },
   "devDependencies": {
     "turbo": "^2.5.4",

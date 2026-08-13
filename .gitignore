@@ -7,8 +7,12 @@ build
 *.log
 .DS_Store
 coverage
+*.tsbuildinfo
 apps/api/prisma/*.db
 apps/api/prisma/*.db-journal
+apps/api/prisma/seed.js
+apps/api/prisma/seed.js.map
+apps/api/prisma/seed.d.ts
 *.pem
 keys/
 !**.well-known/**/*.pem.example

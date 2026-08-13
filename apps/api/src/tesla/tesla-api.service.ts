@@ -7,6 +7,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { CryptoService } from '../common/crypto.service';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  DEFAULT_TESLA_API_BASE,
+  DEFAULT_TESLA_TOKEN_URL,
+} from './tesla.constants';
 
 export type TeslaVehicleDto = {
   vin: string;
@@ -53,8 +57,7 @@ export class TeslaApiService {
     const clientId = this.config.getOrThrow<string>('TESLA_CLIENT_ID');
     const clientSecret = this.config.getOrThrow<string>('TESLA_CLIENT_SECRET');
     const tokenUrl =
-      this.config.get<string>('TESLA_TOKEN_URL') ??
-      'https://auth.tesla.com/oauth2/v3/token';
+      this.config.get<string>('TESLA_TOKEN_URL') ?? DEFAULT_TESLA_TOKEN_URL;
 
     const body = new URLSearchParams({
       grant_type: 'refresh_token',
@@ -106,8 +109,7 @@ export class TeslaApiService {
 
     const accessToken = await this.getAccessToken(userId);
     const base =
-      this.config.get<string>('TESLA_API_BASE') ??
-      'https://fleet-api.prd.na.vn.cloud.tesla.com';
+      this.config.get<string>('TESLA_API_BASE') ?? DEFAULT_TESLA_API_BASE;
 
     const res = await fetch(`${base}/api/1/vehicles`, {
       headers: { Authorization: `Bearer ${accessToken}` },

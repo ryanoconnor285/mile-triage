@@ -3,6 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import { DEFAULT_MILEAGE_RATE } from '@mile-triage/shared';
 import { CryptoService } from '../common/crypto.service';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  DEFAULT_TESLA_API_BASE,
+  DEFAULT_TESLA_AUTH_URL,
+  DEFAULT_TESLA_TOKEN_URL,
+} from '../tesla/tesla.constants';
 import { AuthUser } from './auth.types';
 
 const SESSION_COOKIE = 'mile_session';
@@ -148,8 +153,7 @@ export class AuthService {
     const clientId = this.config.getOrThrow<string>('TESLA_CLIENT_ID');
     const redirectUri = this.config.getOrThrow<string>('TESLA_REDIRECT_URI');
     const authUrl =
-      this.config.get<string>('TESLA_AUTH_URL') ??
-      'https://auth.tesla.com/oauth2/v3/authorize';
+      this.config.get<string>('TESLA_AUTH_URL') ?? DEFAULT_TESLA_AUTH_URL;
     const scopes =
       this.config.get<string>('TESLA_SCOPES') ??
       'openid offline_access user_data vehicle_device_data vehicle_location';
@@ -173,10 +177,9 @@ export class AuthService {
     const redirectUri = this.config.getOrThrow<string>('TESLA_REDIRECT_URI');
     const tokenUrl =
       this.config.get<string>('TESLA_TOKEN_URL') ??
-      'https://auth.tesla.com/oauth2/v3/token';
+      DEFAULT_TESLA_TOKEN_URL;
     const audience =
-      this.config.get<string>('TESLA_AUDIENCE') ??
-      'https://fleet-api.prd.na.vn.cloud.tesla.com';
+      this.config.get<string>('TESLA_AUDIENCE') ?? DEFAULT_TESLA_API_BASE;
 
     const body = new URLSearchParams({
       grant_type: 'authorization_code',

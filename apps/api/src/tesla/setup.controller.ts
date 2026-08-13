@@ -1,7 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { existsSync } from 'fs';
-import { join } from 'path';
+import { resolveTeslaPublicKey } from './public-key';
 import { TeslaApiService } from './tesla-api.service';
 
 @Controller('setup')
@@ -15,12 +14,7 @@ export class SetupController {
   status() {
     const authMode = this.config.get<string>('AUTH_MODE') ?? 'mock';
     const domain = this.config.get<string>('TESLA_DOMAIN') ?? '';
-    const publicKeyPath =
-      this.config.get<string>('TESLA_PUBLIC_KEY_PATH') ??
-      join(process.cwd(), 'keys', 'public-key.pem');
-    const hasPublicKey =
-      existsSync(publicKeyPath) ||
-      existsSync(join(process.cwd(), '..', '..', 'keys', 'public-key.pem'));
+    const hasPublicKey = resolveTeslaPublicKey(this.config) !== null;
 
     const checks = [
       {
@@ -48,8 +42,8 @@ export class SetupController {
         label: 'Public key file',
         ok: hasPublicKey,
         detail: hasPublicKey
-          ? 'Found keys/public-key.pem'
-          : 'Run npm run tesla:keys',
+          ? 'Served at /.well-known/appspecific/com.tesla.3p.public-key.pem'
+          : 'Run npm run tesla:keys, then set TESLA_PUBLIC_KEY_PEM when deployed',
       },
       {
         id: 'redirect_uri',

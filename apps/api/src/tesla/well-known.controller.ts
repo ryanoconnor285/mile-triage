@@ -1,8 +1,7 @@
 import { Controller, Get, NotFoundException, Res } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
-import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { resolveTeslaPublicKey } from './public-key';
 
 @Controller('.well-known')
 export class WellKnownController {
@@ -10,21 +9,14 @@ export class WellKnownController {
 
   @Get('appspecific/com.tesla.3p.public-key.pem')
   publicKey(@Res() res: Response) {
-    const configured = this.config.get<string>('TESLA_PUBLIC_KEY_PATH');
-    const candidates = [
-      configured,
-      join(process.cwd(), 'keys', 'public-key.pem'),
-      join(process.cwd(), '..', '..', 'keys', 'public-key.pem'),
-    ].filter(Boolean) as string[];
-
-    const path = candidates.find((p) => existsSync(p));
-    if (!path) {
+    const pem = resolveTeslaPublicKey(this.config);
+    if (!pem) {
       throw new NotFoundException(
-        'Tesla public key not found. Generate keys/public-key.pem (see README).',
+        'Tesla public key not found. Set TESLA_PUBLIC_KEY_PEM or provide keys/public-key.pem (see README).',
       );
     }
 
     res.setHeader('Content-Type', 'application/x-pem-file');
-    res.send(readFileSync(path, 'utf8'));
+    res.send(pem);
   }
 }
