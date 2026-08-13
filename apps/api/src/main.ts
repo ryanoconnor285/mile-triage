@@ -9,6 +9,9 @@ async function bootstrap() {
   const config = app.get(ConfigService);
   const webOrigin = webOriginFromEnv(config.get<string>('WEB_ORIGIN'));
 
+  // Railway/nginx terminates TLS; honor X-Forwarded-Proto for Secure cookies.
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
   app.use(cookieParser());
   app.enableCors({
     origin: webOrigin,
