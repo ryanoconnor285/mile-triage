@@ -7,6 +7,7 @@ import type {
 } from '@mile-triage/shared';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import { driveMissingLocation, formatDriveRoute } from '../drive-labels';
 import { DriveMap } from '../components/DriveMap';
 
 function formatWhen(iso: string) {
@@ -426,9 +427,14 @@ export function TriagePage() {
                         onChange={() => toggleSelect(d.id)}
                       />
                       <div className="drive-meta">
-                        <strong>
-                          {d.startAddress ?? 'Start'} → {d.endAddress ?? 'End'}
-                        </strong>
+                        <strong>{formatDriveRoute(d)}</strong>
+                        {driveMissingLocation(d) && (
+                          <span>
+                            Tesla did not share GPS for this trip, so there is
+                            no location to show. New drives should include
+                            addresses.
+                          </span>
+                        )}
                         <span>{formatWhen(d.startedAt)}</span>
                         <span>{d.vehicleName ?? 'Vehicle'}</span>
                         <input

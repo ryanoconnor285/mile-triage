@@ -288,7 +288,9 @@ export class TeslaApiService {
     const base = await this.resolveApiBase(userId, accessToken);
     const url =
       `${base}/api/1/vehicles/${encodeURIComponent(vin)}/vehicle_data` +
-      `?endpoints=${encodeURIComponent('drive_state;vehicle_state')}`;
+      // location_data is required on firmware 2023.38+ or latitude/longitude
+      // are omitted even when vehicle_location scope is granted.
+      `?endpoints=${encodeURIComponent('drive_state;vehicle_state;location_data')}`;
 
     const res = await fetch(url, {
       headers: {
@@ -338,8 +340,13 @@ export class TeslaApiService {
         state?: string;
         drive_state?: {
           shift_state?: string | null;
-          latitude?: number;
-          longitude?: number;
+          latitude?: number | string;
+          longitude?: number | string;
+          timestamp?: number;
+        };
+        location_state?: {
+          latitude?: number | string;
+          longitude?: number | string;
           timestamp?: number;
         };
         vehicle_state?: { odometer?: number };
@@ -347,19 +354,47 @@ export class TeslaApiService {
     };
 
     const drive = json.response?.drive_state;
+    const location = json.response?.location_state;
     const odometer = json.response?.vehicle_state?.odometer;
     if (json.response?.state && json.response.state !== 'online') {
       return unreachable;
     }
 
+    const lat = readCoord(drive?.latitude, location?.latitude);
+    const lng = readCoord(drive?.longitude, location?.longitude);
+    const observedAt = readTimestamp(drive?.timestamp, location?.timestamp);
+
     return {
       reachable: true,
       // Fleet API reports odometer in miles regardless of the car's display units.
       odometer: typeof odometer === 'number' ? odometer : null,
-      lat: typeof drive?.latitude === 'number' ? drive.latitude : null,
-      lng: typeof drive?.longitude === 'number' ? drive.longitude : null,
+      lat,
+      lng,
       shiftState: drive?.shift_state ?? null,
-      observedAt: drive?.timestamp ? new Date(drive.timestamp) : new Date(),
+      observedAt,
     };
   }
+}
+
+function readCoord(
+  primary?: number | string,
+  fallback?: number | string,
+): number | null {
+  return parseCoord(primary) ?? parseCoord(fallback);
+}
+
+function parseCoord(value?: number | string): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function readTimestamp(...candidates: Array<number | undefined>): Date {
+  for (const ts of candidates) {
+    if (typeof ts === 'number' && ts > 0) return new Date(ts);
+  }
+  return new Date();
 }

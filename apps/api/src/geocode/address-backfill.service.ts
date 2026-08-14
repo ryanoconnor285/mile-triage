@@ -62,10 +62,10 @@ export class AddressBackfillService {
 
     const pending = candidates.filter(
       (d) =>
-        (isCoordinateLabel(d.startAddress) &&
+        ((isCoordinateLabel(d.startAddress) || !d.startAddress) &&
           d.startLat !== null &&
           d.startLng !== null) ||
-        (isCoordinateLabel(d.endAddress) &&
+        ((isCoordinateLabel(d.endAddress) || !d.endAddress) &&
           d.endLat !== null &&
           d.endLng !== null),
     );
@@ -75,7 +75,7 @@ export class AddressBackfillService {
       const data: { startAddress?: string; endAddress?: string } = {};
 
       if (
-        isCoordinateLabel(drive.startAddress) &&
+        (isCoordinateLabel(drive.startAddress) || !drive.startAddress) &&
         drive.startLat !== null &&
         drive.startLng !== null
       ) {
@@ -87,7 +87,7 @@ export class AddressBackfillService {
       }
 
       if (
-        isCoordinateLabel(drive.endAddress) &&
+        (isCoordinateLabel(drive.endAddress) || !drive.endAddress) &&
         drive.endLat !== null &&
         drive.endLng !== null
       ) {

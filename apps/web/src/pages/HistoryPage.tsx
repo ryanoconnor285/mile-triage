@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Category, DriveDetail, DriveSummary } from '@mile-triage/shared';
 import { api } from '../api';
+import { formatDriveRoute } from '../drive-labels';
 import { DriveMap } from '../components/DriveMap';
 
 function formatWhen(iso: string) {
@@ -113,9 +114,7 @@ export function HistoryPage() {
                   {(d.categoryName ?? '?').slice(0, 4)}
                 </div>
                 <div className="drive-meta">
-                  <strong>
-                    {d.startAddress ?? 'Start'} → {d.endAddress ?? 'End'}
-                  </strong>
+                  <strong>{formatDriveRoute(d)}</strong>
                   <span>{formatWhen(d.startedAt)}</span>
                   {d.purposeNote && <span>Purpose: {d.purposeNote}</span>}
                   {d.notes && <span>Notes: {d.notes}</span>}
