@@ -1,25 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Category, DriveDetail, DriveSummary } from '@mile-triage/shared';
+import type { Category, DriveSummary } from '@mile-triage/shared';
 import { api } from '../api';
-import { formatDriveRoute } from '../drive-labels';
-import { DriveMap } from '../components/DriveMap';
-
-function formatWhen(iso: string) {
-  return new Date(iso).toLocaleString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
+import {
+  formatDriveEnd,
+  formatDriveStart,
+  formatDriveWhen,
+} from '../drive-labels';
 
 export function HistoryPage() {
   const [drives, setDrives] = useState<DriveSummary[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [filter, setFilter] = useState<'ALL' | string>('ALL');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<DriveDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -35,11 +26,6 @@ export function HistoryPage() {
       );
       setDrives(merged);
       setCategories(cats);
-      setSelectedId((current) => {
-        if (current && merged.some((d) => d.id === current)) return current;
-        return merged[0]?.id ?? null;
-      });
-      if (!merged.length) setDetail(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load history');
     }
@@ -48,17 +34,6 @@ export function HistoryPage() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  useEffect(() => {
-    if (!selectedId) return;
-    let cancelled = false;
-    void api.drive(selectedId).then((d) => {
-      if (!cancelled) setDetail(d);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedId]);
 
   const visible = useMemo(() => {
     if (filter === 'ALL') return drives;
@@ -71,91 +46,105 @@ export function HistoryPage() {
   };
 
   return (
-    <div className="page">
-      <div className="triage">
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <h2>History</h2>
-              <div className="muted">{visible.length} classified drives</div>
-            </div>
-            <div className="actions">
-              <button
-                className={`btn ghost ${filter === 'ALL' ? 'active-filter' : ''}`}
-                onClick={() => setFilter('ALL')}
-              >
-                All
-              </button>
-              {categories.map((c) => (
-                <button
-                  key={c.id}
-                  className={`btn ghost ${filter === c.id ? 'active-filter' : ''}`}
-                  onClick={() => setFilter(c.id)}
-                >
-                  {c.name}
-                </button>
-              ))}
-            </div>
+    <div className="page drive-workspace">
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>History</h2>
+            <div className="muted">{visible.length} classified drives</div>
           </div>
-          <div className="drive-list">
-            {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
-            {!visible.length && (
-              <p className="muted">No classified drives yet — triage first.</p>
-            )}
-            {visible.map((d) => (
-              <div
-                key={d.id}
-                className={`drive-row ${selectedId === d.id ? 'selected' : ''}`}
-                onClick={() => setSelectedId(d.id)}
+          <div className="actions">
+            <button
+              className={`btn ghost ${filter === 'ALL' ? 'active-filter' : ''}`}
+              onClick={() => setFilter('ALL')}
+            >
+              All
+            </button>
+            {categories.map((c) => (
+              <button
+                key={c.id}
+                className={`btn ghost ${filter === c.id ? 'active-filter' : ''}`}
+                onClick={() => setFilter(c.id)}
               >
-                <div
-                  className={`status-pill ${d.categoryDeductible ? 'biz' : 'per'}`}
-                >
-                  {(d.categoryName ?? '?').slice(0, 4)}
-                </div>
-                <div className="drive-meta">
-                  <strong>{formatDriveRoute(d)}</strong>
-                  <span>{formatWhen(d.startedAt)}</span>
-                  {d.purposeNote && <span>Purpose: {d.purposeNote}</span>}
-                  {d.notes && <span>Notes: {d.notes}</span>}
-                  <div className="actions" style={{ marginTop: '0.4rem' }}>
-                    {categories.map((c) => (
-                      <button
-                        key={c.id}
-                        className={`btn ${c.deductible ? 'business' : 'personal'}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void reclassify(d.id, c.id);
-                        }}
-                      >
-                        {c.name}
-                      </button>
-                    ))}
-                    <button
-                      className="btn ghost"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void reclassify(d.id, null);
-                      }}
-                    >
-                      Unclassify
-                    </button>
-                  </div>
-                </div>
-                <div className="miles">
-                  {d.distanceMiles?.toFixed(1) ?? '—'} mi
-                </div>
-              </div>
+                {c.name}
+              </button>
             ))}
           </div>
-        </section>
-        <section className="panel">
-          <div className="panel-header">
-            <h2>Route</h2>
-          </div>
-          <DriveMap drive={detail} />
-        </section>
-      </div>
+        </div>
+
+        <div className="drive-table-wrap">
+          {error && (
+            <p className="table-message" style={{ color: 'var(--danger)' }}>
+              {error}
+            </p>
+          )}
+          {!visible.length && (
+            <p className="table-message muted">
+              No classified drives yet — triage first.
+            </p>
+          )}
+          {visible.length > 0 && (
+            <table className="drive-table">
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>Category</th>
+                  <th>From</th>
+                  <th>To</th>
+                  <th className="col-num">Mi</th>
+                  <th>Vehicle</th>
+                  <th>Purpose</th>
+                  <th>Notes</th>
+                  <th>Reclassify</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((d) => (
+                  <tr key={d.id}>
+                    <td className="col-when">{formatDriveWhen(d.startedAt)}</td>
+                    <td>
+                      <span
+                        className={`status-pill ${d.categoryDeductible ? 'biz' : 'per'}`}
+                      >
+                        {d.categoryName ?? '—'}
+                      </span>
+                    </td>
+                    <td className="col-place" title={formatDriveStart(d)}>
+                      {formatDriveStart(d)}
+                    </td>
+                    <td className="col-place" title={formatDriveEnd(d)}>
+                      {formatDriveEnd(d)}
+                    </td>
+                    <td className="col-num">
+                      {d.distanceMiles?.toFixed(1) ?? '—'}
+                    </td>
+                    <td className="col-vehicle">{d.vehicleName ?? '—'}</td>
+                    <td className="col-text">{d.purposeNote ?? '—'}</td>
+                    <td className="col-text">{d.notes ?? '—'}</td>
+                    <td>
+                      <select
+                        className="table-select"
+                        value={d.categoryId ?? ''}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          void reclassify(d.id, value || null);
+                        }}
+                      >
+                        <option value="">Unclassify</option>
+                        {categories.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </section>
     </div>
   );
 }

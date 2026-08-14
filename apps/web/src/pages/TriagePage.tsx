@@ -1,24 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
-import type {
-  Category,
-  DriveDetail,
-  DriveSummary,
-  Vehicle,
-} from '@mile-triage/shared';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import type { Category, DriveSummary, Vehicle } from '@mile-triage/shared';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
-import { driveMissingLocation, formatDriveRoute } from '../drive-labels';
-import { DriveMap } from '../components/DriveMap';
-
-function formatWhen(iso: string) {
-  return new Date(iso).toLocaleString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
+import {
+  driveMissingLocation,
+  formatDriveEnd,
+  formatDriveStart,
+  formatDriveWhen,
+} from '../drive-labels';
 
 function startOfWeek(date: Date) {
   const d = new Date(date);
@@ -57,14 +46,11 @@ const emptyEntry = () => ({
 export function TriagePage() {
   const [drives, setDrives] = useState<DriveSummary[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<DriveDetail | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [loading, setLoading] = useState(true);
   const [simulating, setSimulating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Left null until known so the demo-only control never flashes for real users.
   const [authMode, setAuthMode] = useState<string | null>(null);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [entryOpen, setEntryOpen] = useState(false);
@@ -94,11 +80,6 @@ export function TriagePage() {
         }
         return next;
       });
-      setSelectedId((current) => {
-        if (current && list.some((d) => d.id === current)) return current;
-        return list[0]?.id ?? null;
-      });
-      if (!list.length) setDetail(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load drives');
     } finally {
@@ -109,17 +90,6 @@ export function TriagePage() {
   useEffect(() => {
     void load();
   }, []);
-
-  useEffect(() => {
-    if (!selectedId) return;
-    let cancelled = false;
-    void api.drive(selectedId).then((d) => {
-      if (!cancelled) setDetail(d);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedId]);
 
   const totalMiles = useMemo(
     () =>
@@ -143,6 +113,17 @@ export function TriagePage() {
     );
   }, [drives]);
 
+  const allSelected =
+    drives.length > 0 && drives.every((d) => selectedIds.has(d.id));
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+      return;
+    }
+    setSelectedIds(new Set(drives.map((d) => d.id)));
+  };
+
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -164,6 +145,7 @@ export function TriagePage() {
   };
 
   const classify = async (id: string, categoryId: string | null) => {
+    if (!categoryId) return;
     const draft = drafts[id] ?? { purposeNote: '', notes: '' };
     await api.updateDrive(id, {
       categoryId,
@@ -175,8 +157,7 @@ export function TriagePage() {
 
   const classifyBatch = async (categoryId: string | null) => {
     const ids = [...selectedIds];
-    if (!ids.length) return;
-    // Persist per-card notes/purpose first for selected rows
+    if (!ids.length || !categoryId) return;
     await Promise.all(
       ids.map((id) => {
         const draft = drafts[id] ?? { purposeNote: '', notes: '' };
@@ -233,268 +214,288 @@ export function TriagePage() {
   };
 
   return (
-    <div className="page">
-      <div className="triage">
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <h2>Unclassified</h2>
-              <div className="muted">
-                {drives.length} drives · {totalMiles} mi
-              </div>
-            </div>
-            <div className="actions">
-              <button
-                className="btn ghost"
-                onClick={() => setEntryOpen((open) => !open)}
-              >
-                {entryOpen ? 'Cancel' : 'Add drive'}
-              </button>
-              {authMode === 'mock' && (
-                <button
-                  className="btn ghost"
-                  disabled={simulating}
-                  onClick={() => void simulate()}
-                >
-                  {simulating ? 'Simulating…' : 'Simulate drive'}
-                </button>
-              )}
-              <Link className="btn ghost" to="/categories">
-                Categories
-              </Link>
+    <div className="page drive-workspace">
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Unclassified</h2>
+            <div className="muted">
+              {drives.length} drives · {totalMiles} mi
             </div>
           </div>
-          {entryOpen && (
-            <div className="purpose-bar">
-              <div className="muted" style={{ marginBottom: '0.45rem' }}>
-                Add a drive by hand
-              </div>
-              <div className="entry-grid">
+          <div className="actions">
+            <button
+              className="btn ghost"
+              onClick={() => setEntryOpen((open) => !open)}
+            >
+              {entryOpen ? 'Cancel' : 'Add drive'}
+            </button>
+            {authMode === 'mock' && (
+              <button
+                className="btn ghost"
+                disabled={simulating}
+                onClick={() => void simulate()}
+              >
+                {simulating ? 'Simulating…' : 'Simulate drive'}
+              </button>
+            )}
+            <Link className="btn ghost" to="/categories">
+              Categories
+            </Link>
+          </div>
+        </div>
+
+        {entryOpen && (
+          <div className="purpose-bar">
+            <div className="muted" style={{ marginBottom: '0.45rem' }}>
+              Add a drive by hand
+            </div>
+            <div className="entry-grid">
+              <label>
+                <span className="muted">Date</span>
+                <input
+                  className="purpose-input"
+                  type="date"
+                  max={todayLocal()}
+                  value={entry.date}
+                  onChange={(e) => setEntry({ ...entry, date: e.target.value })}
+                />
+              </label>
+              <label>
+                <span className="muted">Miles</span>
+                <input
+                  className="purpose-input"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  inputMode="decimal"
+                  placeholder="12.4"
+                  value={entry.miles}
+                  onChange={(e) => setEntry({ ...entry, miles: e.target.value })}
+                />
+              </label>
+              <label>
+                <span className="muted">Category</span>
+                <select
+                  className="purpose-input"
+                  value={entry.categoryId}
+                  onChange={(e) =>
+                    setEntry({ ...entry, categoryId: e.target.value })
+                  }
+                >
+                  <option value="">Decide later</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {vehicles.length > 0 && (
                 <label>
-                  <span className="muted">Date</span>
-                  <input
-                    className="purpose-input"
-                    type="date"
-                    max={todayLocal()}
-                    value={entry.date}
-                    onChange={(e) =>
-                      setEntry({ ...entry, date: e.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  <span className="muted">Miles</span>
-                  <input
-                    className="purpose-input"
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    inputMode="decimal"
-                    placeholder="12.4"
-                    value={entry.miles}
-                    onChange={(e) =>
-                      setEntry({ ...entry, miles: e.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  <span className="muted">Category</span>
+                  <span className="muted">Vehicle</span>
                   <select
                     className="purpose-input"
-                    value={entry.categoryId}
+                    value={entry.vehicleId}
                     onChange={(e) =>
-                      setEntry({ ...entry, categoryId: e.target.value })
+                      setEntry({ ...entry, vehicleId: e.target.value })
                     }
                   >
-                    <option value="">Decide later</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
+                    <option value="">No vehicle</option>
+                    {vehicles.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.displayName ?? v.vin}
                       </option>
                     ))}
                   </select>
                 </label>
-                {vehicles.length > 0 && (
-                  <label>
-                    <span className="muted">Vehicle</span>
-                    <select
-                      className="purpose-input"
-                      value={entry.vehicleId}
-                      onChange={(e) =>
-                        setEntry({ ...entry, vehicleId: e.target.value })
-                      }
-                    >
-                      <option value="">No vehicle</option>
-                      {vehicles.map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {v.displayName ?? v.vin}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-                <label>
-                  <span className="muted">From</span>
-                  <input
-                    className="purpose-input"
-                    placeholder="Optional"
-                    value={entry.startAddress}
-                    onChange={(e) =>
-                      setEntry({ ...entry, startAddress: e.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  <span className="muted">To</span>
-                  <input
-                    className="purpose-input"
-                    placeholder="Optional"
-                    value={entry.endAddress}
-                    onChange={(e) =>
-                      setEntry({ ...entry, endAddress: e.target.value })
-                    }
-                  />
-                </label>
-                <label className="entry-wide">
-                  <span className="muted">Purpose</span>
-                  <input
-                    className="purpose-input"
-                    placeholder="Client meeting, site visit…"
-                    value={entry.purposeNote}
-                    onChange={(e) =>
-                      setEntry({ ...entry, purposeNote: e.target.value })
-                    }
-                  />
-                </label>
-              </div>
-              <div className="actions" style={{ marginTop: '0.6rem' }}>
+              )}
+              <label>
+                <span className="muted">From</span>
+                <input
+                  className="purpose-input"
+                  placeholder="Optional"
+                  value={entry.startAddress}
+                  onChange={(e) =>
+                    setEntry({ ...entry, startAddress: e.target.value })
+                  }
+                />
+              </label>
+              <label>
+                <span className="muted">To</span>
+                <input
+                  className="purpose-input"
+                  placeholder="Optional"
+                  value={entry.endAddress}
+                  onChange={(e) =>
+                    setEntry({ ...entry, endAddress: e.target.value })
+                  }
+                />
+              </label>
+              <label className="entry-wide">
+                <span className="muted">Purpose</span>
+                <input
+                  className="purpose-input"
+                  placeholder="Client meeting, site visit…"
+                  value={entry.purposeNote}
+                  onChange={(e) =>
+                    setEntry({ ...entry, purposeNote: e.target.value })
+                  }
+                />
+              </label>
+            </div>
+            <div className="actions" style={{ marginTop: '0.6rem' }}>
+              <button
+                className="btn"
+                disabled={savingEntry}
+                onClick={() => void addDrive()}
+              >
+                {savingEntry ? 'Saving…' : 'Save drive'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {selectedIds.size > 0 && (
+          <div className="purpose-bar">
+            <div className="muted" style={{ marginBottom: '0.45rem' }}>
+              Batch classify {selectedIds.size} selected
+            </div>
+            <div className="actions">
+              {categories.map((c) => (
                 <button
-                  className="btn"
-                  disabled={savingEntry}
-                  onClick={() => void addDrive()}
+                  key={c.id}
+                  className={`btn ${c.deductible ? 'business' : 'personal'}`}
+                  onClick={() => void classifyBatch(c.id)}
                 >
-                  {savingEntry ? 'Saving…' : 'Save drive'}
+                  {c.name}
                 </button>
-              </div>
+              ))}
             </div>
+          </div>
+        )}
+
+        <div className="drive-table-wrap">
+          {loading && <p className="table-message muted">Loading drives…</p>}
+          {error && (
+            <p className="table-message" style={{ color: 'var(--danger)' }}>
+              {error}
+            </p>
           )}
-          {selectedIds.size > 0 && (
-            <div className="purpose-bar">
-              <div className="muted" style={{ marginBottom: '0.45rem' }}>
-                Batch classify {selectedIds.size} selected
-              </div>
-              <div className="actions">
-                {categories.map((c) => (
-                  <button
-                    key={c.id}
-                    className={`btn ${c.deductible ? 'business' : 'personal'}`}
-                    onClick={() => void classifyBatch(c.id)}
-                  >
-                    {c.name}
-                  </button>
-                ))}
-              </div>
-            </div>
+          {!loading && !drives.length && (
+            <p className="table-message muted">
+              {authMode === 'mock'
+                ? 'Inbox zero. Use “Simulate drive” to add a demo trip.'
+                : 'Inbox zero. New drives show up here once your car finishes a trip.'}
+            </p>
           )}
-          <div className="drive-list">
-            {loading && <p className="muted">Loading drives…</p>}
-            {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
-            {!loading && !drives.length && (
-              <p className="muted">
-                {authMode === 'mock'
-                  ? 'Inbox zero. Use “Simulate drive” to add a demo trip.'
-                  : 'Inbox zero. New drives show up here once your car finishes a trip.'}
-              </p>
-            )}
-            {weekGroups.map((group) => (
-              <div key={group.start.toISOString()} className="week-group">
-                <div className="week-label">{weekLabel(group.start)}</div>
-                {group.drives.map((d) => {
-                  const draft = drafts[d.id] ?? {
-                    purposeNote: '',
-                    notes: '',
-                  };
-                  return (
-                    <div
-                      key={d.id}
-                      className={`drive-row ${selectedId === d.id ? 'selected' : ''}`}
-                      onClick={() => setSelectedId(d.id)}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(d.id)}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={() => toggleSelect(d.id)}
-                      />
-                      <div className="drive-meta">
-                        <strong>{formatDriveRoute(d)}</strong>
-                        {driveMissingLocation(d) && (
-                          <span>
-                            Tesla did not share GPS for this trip, so there is
-                            no location to show. New drives should include
-                            addresses.
-                          </span>
-                        )}
-                        <span>{formatWhen(d.startedAt)}</span>
-                        <span>{d.vehicleName ?? 'Vehicle'}</span>
-                        <input
-                          className="purpose-input card-field"
-                          placeholder="Business purpose (e.g. client meeting)"
-                          value={draft.purposeNote}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) =>
-                            setDraft(d.id, { purposeNote: e.target.value })
-                          }
-                        />
-                        <textarea
-                          className="purpose-input card-field notes-field"
-                          placeholder="Notes"
-                          rows={2}
-                          value={draft.notes}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) =>
-                            setDraft(d.id, { notes: e.target.value })
-                          }
-                        />
-                        <div className="actions" style={{ marginTop: '0.35rem' }}>
-                          {categories.map((c) => (
-                            <button
-                              key={c.id}
-                              className={`btn ${c.deductible ? 'business' : 'personal'}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void classify(d.id, c.id);
+          {drives.length > 0 && (
+            <table className="drive-table">
+              <thead>
+                <tr>
+                  <th className="col-check">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                      aria-label="Select all drives"
+                    />
+                  </th>
+                  <th>When</th>
+                  <th>From</th>
+                  <th>To</th>
+                  <th className="col-num">Mi</th>
+                  <th>Vehicle</th>
+                  <th>Purpose</th>
+                  <th>Notes</th>
+                  <th>Classify</th>
+                </tr>
+              </thead>
+              <tbody>
+                {weekGroups.map((group) => (
+                  <Fragment key={group.start.toISOString()}>
+                    <tr className="week-row">
+                      <td colSpan={9}>{weekLabel(group.start)}</td>
+                    </tr>
+                    {group.drives.map((d) => {
+                      const draft = drafts[d.id] ?? {
+                        purposeNote: '',
+                        notes: '',
+                      };
+                      const missingLocation = driveMissingLocation(d);
+                      return (
+                        <tr key={d.id}>
+                          <td className="col-check">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(d.id)}
+                              onChange={() => toggleSelect(d.id)}
+                              aria-label={`Select drive on ${formatDriveWhen(d.startedAt)}`}
+                            />
+                          </td>
+                          <td className="col-when">{formatDriveWhen(d.startedAt)}</td>
+                          <td className="col-place" title={formatDriveStart(d)}>
+                            {formatDriveStart(d)}
+                          </td>
+                          <td className="col-place" title={formatDriveEnd(d)}>
+                            {formatDriveEnd(d)}
+                          </td>
+                          <td className="col-num">
+                            {d.distanceMiles?.toFixed(1) ?? '—'}
+                          </td>
+                          <td className="col-vehicle">
+                            {d.vehicleName ?? '—'}
+                          </td>
+                          <td>
+                            <input
+                              className="table-input"
+                              placeholder="Purpose"
+                              value={draft.purposeNote}
+                              onChange={(e) =>
+                                setDraft(d.id, { purposeNote: e.target.value })
+                              }
+                            />
+                          </td>
+                          <td>
+                            <input
+                              className="table-input"
+                              placeholder="Notes"
+                              value={draft.notes}
+                              onChange={(e) =>
+                                setDraft(d.id, { notes: e.target.value })
+                              }
+                            />
+                          </td>
+                          <td>
+                            <select
+                              className="table-select"
+                              defaultValue=""
+                              onChange={(e) => {
+                                void classify(d.id, e.target.value || null);
+                                e.target.value = '';
                               }}
                             >
-                              {c.name}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="miles">
-                        {d.distanceMiles?.toFixed(1) ?? '—'} mi
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        </section>
-        <section className="panel">
-          <div className="panel-header">
-            <h2>Route preview</h2>
-            {detail && (
-              <span className="muted">
-                {detail.distanceMiles?.toFixed(1)} mi · odo{' '}
-                {detail.startOdometer}
-                {detail.endOdometer != null ? ` → ${detail.endOdometer}` : ''}
-              </span>
-            )}
-          </div>
-          <DriveMap drive={detail} />
-        </section>
-      </div>
+                              <option value="">Choose…</option>
+                              {categories.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.name}
+                                </option>
+                              ))}
+                            </select>
+                            {missingLocation && (
+                              <span className="row-hint">No GPS on file</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </section>
     </div>
   );
 }

@@ -22,10 +22,26 @@ function formatEndpoint(
   return fallback;
 }
 
+export function formatDriveStart(d: EndpointDrive): string {
+  return formatEndpoint(d.startAddress, d.startLat, d.startLng, '—');
+}
+
+export function formatDriveEnd(d: EndpointDrive): string {
+  return formatEndpoint(d.endAddress, d.endLat, d.endLng, '—');
+}
+
 export function formatDriveRoute(d: EndpointDrive): string {
-  const start = formatEndpoint(d.startAddress, d.startLat, d.startLng, 'Start');
-  const end = formatEndpoint(d.endAddress, d.endLat, d.endLng, 'End');
-  return `${start} → ${end}`;
+  return `${formatDriveStart(d)} → ${formatDriveEnd(d)}`;
+}
+
+export function formatDriveWhen(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }
 
 /** True when a car-recorded drive has neither addresses nor coordinates yet. */
