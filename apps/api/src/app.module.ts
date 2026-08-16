@@ -10,6 +10,7 @@ import { GeocodeModule } from './geocode/geocode.module';
 import { PollingModule } from './polling/polling.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ReportsModule } from './reports/reports.module';
+import { RoutesModule } from './routes/routes.module';
 import { SettingsModule } from './settings/settings.module';
 import { TelemetryModule } from './telemetry/telemetry.module';
 import { TeslaModule } from './tesla/tesla.module';
@@ -33,6 +34,7 @@ import { VehiclesModule } from './vehicles/vehicles.module';
     PollingModule,
     SettingsModule,
     ReportsModule,
+    RoutesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import type { Category, DriveStatus, DriveSummary } from '@mile-triage/shared';
 import { api } from '../api';
-import { isSystemTripType, tagForStatus } from '../category-utils';
+import { isSystemTripType } from '../category-utils';
 import { DriveCard } from '../components/DriveCard';
 import { DriveClassifyControls } from '../components/DriveClassifyControls';
 import {
@@ -12,6 +12,8 @@ import {
   formatTripType,
   statusClass,
 } from '../drive-labels';
+import { useDriveSave } from '../hooks/useDriveSave';
+import { groupDrivesByWeek, weekLabel } from '../week-groups';
 
 export function HistoryPage() {
   const [drives, setDrives] = useState<DriveSummary[]>([]);
@@ -23,6 +25,12 @@ export function HistoryPage() {
     Record<string, { notes: string; categoryId: string }>
   >({});
   const [error, setError] = useState<string | null>(null);
+  const [saveRouteDriveId, setSaveRouteDriveId] = useState<string | null>(null);
+  const [saveRouteName, setSaveRouteName] = useState('');
+  const [savingRoute, setSavingRoute] = useState(false);
+
+  const { saveStates, saveDrive, scheduleDetailsSave, markEditing } =
+    useDriveSave(categories);
 
   const load = useCallback(async () => {
     try {
@@ -47,6 +55,7 @@ export function HistoryPage() {
         }
         return next;
       });
+      setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load history');
     }
@@ -55,6 +64,32 @@ export function HistoryPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const mergeDrive = useCallback((updated: DriveSummary) => {
+    if (updated.status === 'UNCLASSIFIED') {
+      setDrives((prev) => prev.filter((d) => d.id !== updated.id));
+      return;
+    }
+    setDrives((prev) => {
+      const idx = prev.findIndex((d) => d.id === updated.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = updated;
+        return next;
+      }
+      return [updated, ...prev].sort(
+        (a, b) =>
+          new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+      );
+    });
+    setDrafts((prev) => ({
+      ...prev,
+      [updated.id]: {
+        notes: updated.notes ?? '',
+        categoryId: updated.categoryId ?? '',
+      },
+    }));
+  }, []);
 
   const tripTypeFilters = useMemo(
     () => categories.filter((c) => !isSystemTripType(c.name)),
@@ -69,7 +104,16 @@ export function HistoryPage() {
     return drives.filter((d) => d.categoryId === filter);
   }, [drives, filter]);
 
-  const setDraft = (id: string, patch: Partial<{ notes: string; categoryId: string }>) => {
+  const weekGroups = useMemo(
+    () => groupDrivesByWeek(visible),
+    [visible],
+  );
+
+  const setDraft = (
+    id: string,
+    patch: Partial<{ notes: string; categoryId: string }>,
+  ) => {
+    markEditing(id);
     setDrafts((prev) => ({
       ...prev,
       [id]: {
@@ -80,24 +124,47 @@ export function HistoryPage() {
     }));
   };
 
-  const reclassify = async (
+  const reclassify = (
     id: string,
     status: DriveStatus,
     categoryId?: string | null,
   ) => {
-    const draft = drafts[id] ?? { notes: '', categoryId: '' };
-    const rawTag =
-      categoryId !== undefined ? categoryId : draft.categoryId || null;
-    const tag =
-      status === 'UNCLASSIFIED'
-        ? null
-        : tagForStatus(categories, rawTag, status);
-    await api.updateDrive(id, {
-      status,
-      categoryId: tag,
-      notes: draft.notes.trim() || null,
-    });
-    await load();
+    void saveDrive(
+      id,
+      { status, categoryId: categoryId ?? undefined },
+      drafts,
+      mergeDrive,
+    );
+  };
+
+  const saveDetails = (id: string, status: DriveStatus) => {
+    scheduleDetailsSave(id, status, drafts, mergeDrive);
+  };
+
+  const openSaveRoute = (drive: DriveSummary) => {
+    const label = `${formatDriveStart(drive)} → ${formatDriveEnd(drive)}`;
+    setSaveRouteName(label.slice(0, 80));
+    setSaveRouteDriveId(drive.id);
+  };
+
+  const submitSaveRoute = async () => {
+    if (!saveRouteDriveId || !saveRouteName.trim()) return;
+    const drive = drives.find((d) => d.id === saveRouteDriveId);
+    setSavingRoute(true);
+    setError(null);
+    try {
+      await api.createRoute({
+        name: saveRouteName.trim(),
+        driveId: saveRouteDriveId,
+        suggestedCategoryId: drive?.categoryId ?? null,
+      });
+      setSaveRouteDriveId(null);
+      setSaveRouteName('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save route');
+    } finally {
+      setSavingRoute(false);
+    }
   };
 
   return (
@@ -154,26 +221,34 @@ export function HistoryPage() {
 
           {visible.length > 0 && (
             <div className="drive-cards mobile-only">
-              {visible.map((d) => {
-                const draft = drafts[d.id] ?? { notes: '', categoryId: '' };
-                return (
-                  <DriveCard
-                    key={d.id}
-                    drive={d}
-                    categories={categories}
-                    notes={draft.notes}
-                    categoryId={draft.categoryId}
-                    showUnclassified
-                    onNotesChange={(notes) => setDraft(d.id, { notes })}
-                    onCategoryChange={(categoryId) =>
-                      setDraft(d.id, { categoryId })
-                    }
-                    onClassify={(status, categoryId) =>
-                      void reclassify(d.id, status, categoryId)
-                    }
-                  />
-                );
-              })}
+              {weekGroups.map((group) => (
+                <Fragment key={group.start.toISOString()}>
+                  <div className="week-label">{weekLabel(group.start)}</div>
+                  {group.drives.map((d) => {
+                    const draft = drafts[d.id] ?? { notes: '', categoryId: '' };
+                    return (
+                      <DriveCard
+                        key={d.id}
+                        drive={d}
+                        categories={categories}
+                        notes={draft.notes}
+                        categoryId={draft.categoryId}
+                        saveState={saveStates[d.id]}
+                        showUnclassified
+                        onNotesChange={(notes) => setDraft(d.id, { notes })}
+                        onCategoryChange={(categoryId) =>
+                          setDraft(d.id, { categoryId })
+                        }
+                        onClassify={(status, categoryId) =>
+                          reclassify(d.id, status, categoryId)
+                        }
+                        onSaveDetails={() => saveDetails(d.id, d.status)}
+                        onSaveAsRoute={() => openSaveRoute(d)}
+                      />
+                    );
+                  })}
+                </Fragment>
+              ))}
             </div>
           )}
 
@@ -236,14 +311,16 @@ export function HistoryPage() {
                             notes={draft.notes}
                             categoryId={draft.categoryId}
                             currentStatus={d.status}
+                            saveState={saveStates[d.id]}
                             showUnclassified
                             onNotesChange={(notes) => setDraft(d.id, { notes })}
                             onCategoryChange={(categoryId) =>
                               setDraft(d.id, { categoryId })
                             }
                             onClassify={(status, categoryId) =>
-                              void reclassify(d.id, status, categoryId)
+                              reclassify(d.id, status, categoryId)
                             }
+                            onSaveDetails={() => saveDetails(d.id, d.status)}
                           />
                         </td>
                       </tr>
@@ -255,6 +332,46 @@ export function HistoryPage() {
           )}
         </div>
       </section>
+
+      {saveRouteDriveId && (
+        <div className="modal-backdrop" onClick={() => setSaveRouteDriveId(null)}>
+          <div
+            className="modal-card"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-labelledby="save-route-title"
+          >
+            <h3 id="save-route-title">Save as route</h3>
+            <p className="muted">
+              Name this trip pattern for quick suggestions next time.
+            </p>
+            <label>
+              <span className="muted">Route name</span>
+              <input
+                className="purpose-input"
+                value={saveRouteName}
+                onChange={(e) => setSaveRouteName(e.target.value)}
+                autoFocus
+              />
+            </label>
+            <div className="actions modal-actions">
+              <button
+                className="btn ghost"
+                onClick={() => setSaveRouteDriveId(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn"
+                disabled={savingRoute || !saveRouteName.trim()}
+                onClick={() => void submitSaveRoute()}
+              >
+                {savingRoute ? 'Saving…' : 'Save route'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

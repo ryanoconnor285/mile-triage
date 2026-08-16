@@ -5,6 +5,7 @@ import type {
   DriveDetail,
   DriveSummary,
   ReportSummary,
+  SavedRoute,
   User,
   Vehicle,
 } from '@mile-triage/shared';
@@ -132,4 +133,17 @@ export const api = {
     request<ReportSummary>(
       `/reports/summary?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
     ),
+  routes: () => request<SavedRoute[]>('/routes'),
+  createRoute: (data: {
+    name: string;
+    driveId: string;
+    suggestedCategoryId?: string | null;
+    radiusMiles?: number;
+  }) =>
+    request<SavedRoute>('/routes', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  deleteRoute: (id: string) =>
+    request<{ ok: boolean }>(`/routes/${id}`, { method: 'DELETE' }),
 };

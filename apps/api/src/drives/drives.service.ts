@@ -6,6 +6,7 @@ import {
 import { DriveStatus, Prisma } from '@prisma/client';
 import { BatchClassify, ClassifyDrive, CreateDrive } from '@mile-triage/shared';
 import { CategoriesService } from '../categories/categories.service';
+import { RoutesService } from '../routes/routes.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 type DriveWithRelations = Prisma.DriveGetPayload<{
@@ -17,6 +18,7 @@ export class DrivesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly categories: CategoriesService,
+    private readonly routes: RoutesService,
   ) {}
 
   async list(userId: string, opts: { status?: DriveStatus; week?: string }) {
@@ -38,7 +40,32 @@ export class DrivesService {
       orderBy: { startedAt: 'desc' },
     });
 
-    return drives.map((d) => this.toSummary(d));
+    let routeMatches: Map<
+      string,
+      {
+        routeId: string;
+        routeName: string;
+        suggestedCategoryId: string | null;
+      }
+    > | null = null;
+    if (opts.status === 'UNCLASSIFIED' && drives.length > 0) {
+      routeMatches = await this.routes.matchMany(
+        userId,
+        drives.map((d) => ({
+          id: d.id,
+          startLat: d.startLat,
+          startLng: d.startLng,
+          endLat: d.endLat,
+          endLng: d.endLng,
+          startAddress: d.startAddress,
+          endAddress: d.endAddress,
+        })),
+      );
+    }
+
+    return drives.map((d) =>
+      this.toSummary(d, routeMatches?.get(d.id) ?? null),
+    );
   }
 
   async get(userId: string, id: string) {
@@ -207,7 +234,14 @@ export class DrivesService {
     return this.list(userId, { status: 'UNCLASSIFIED' });
   }
 
-  private toSummary(d: DriveWithRelations) {
+  private toSummary(
+    d: DriveWithRelations,
+    routeSuggestion?: {
+      routeId: string;
+      routeName: string;
+      suggestedCategoryId: string | null;
+    } | null,
+  ) {
     return {
       id: d.id,
       vehicleId: d.vehicleId,
@@ -231,6 +265,7 @@ export class DrivesService {
       categoryDeductible: d.category?.deductible ?? null,
       purposeNote: d.purposeNote,
       notes: d.notes,
+      routeSuggestion: routeSuggestion ?? null,
     };
   }
 }

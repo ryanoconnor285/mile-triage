@@ -39,6 +39,29 @@ export type DrivePoint = z.infer<typeof DrivePointSchema>;
 export const DriveSourceSchema = z.enum(['TELEMETRY', 'MANUAL', 'POLLED']);
 export type DriveSource = z.infer<typeof DriveSourceSchema>;
 
+export const RouteSuggestionSchema = z
+  .object({
+    routeId: z.string(),
+    routeName: z.string(),
+    suggestedCategoryId: z.string().nullable(),
+  })
+  .nullable();
+export type RouteSuggestion = z.infer<typeof RouteSuggestionSchema>;
+
+export const SavedRouteSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  startLat: z.number(),
+  startLng: z.number(),
+  endLat: z.number(),
+  endLng: z.number(),
+  radiusMiles: z.number(),
+  startKeywords: z.string().nullable().optional(),
+  endKeywords: z.string().nullable().optional(),
+  suggestedCategoryId: z.string().nullable().optional(),
+});
+export type SavedRoute = z.infer<typeof SavedRouteSchema>;
+
 export const DriveSummarySchema = z.object({
   id: z.string(),
   vehicleId: z.string().nullable(),
@@ -62,6 +85,7 @@ export const DriveSummarySchema = z.object({
   categoryDeductible: z.boolean().nullable().optional(),
   purposeNote: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
+  routeSuggestion: RouteSuggestionSchema.optional(),
 });
 export type DriveSummary = z.infer<typeof DriveSummarySchema>;
 

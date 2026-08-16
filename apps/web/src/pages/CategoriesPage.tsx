@@ -1,17 +1,27 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Category } from '@mile-triage/shared';
+import type { Category, SavedRoute } from '@mile-triage/shared';
 import { api } from '../api';
 import { isSystemTripType } from '../category-utils';
 
+type SavedRouteRow = SavedRoute & {
+  suggestedCategory?: { id: string; name: string } | null;
+};
+
 export function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
+  const [routes, setRoutes] = useState<SavedRouteRow[]>([]);
   const [name, setName] = useState('');
   const [deductible, setDeductible] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
     try {
-      setCategories(await api.categories());
+      const [cats, savedRoutes] = await Promise.all([
+        api.categories(),
+        api.routes(),
+      ]);
+      setCategories(cats);
+      setRoutes(savedRoutes as SavedRouteRow[]);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load trip types');
@@ -33,6 +43,12 @@ export function CategoriesPage() {
     [categories],
   );
 
+  const categoryName = (id: string | null | undefined) => {
+    if (!id) return 'None';
+    const c = categories.find((cat) => cat.id === id);
+    return c?.name ?? 'Unknown';
+  };
+
   const create = async () => {
     if (!name.trim()) return;
     try {
@@ -51,6 +67,15 @@ export function CategoriesPage() {
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Delete failed');
+    }
+  };
+
+  const removeRoute = async (route: SavedRouteRow) => {
+    try {
+      await api.deleteRoute(route.id);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Delete route failed');
     }
   };
 
@@ -120,6 +145,40 @@ export function CategoriesPage() {
       <section>
         <h2 className="section-title">Personal trip types</h2>
         {renderList(personalTypes, 'No personal trip types yet.')}
+      </section>
+
+      <section>
+        <h2 className="section-title">Saved routes</h2>
+        <p className="muted">
+          Named trip patterns (e.g. Home → Duke) suggest a trip type on
+          unclassified drives. You still choose Business or Personal.
+        </p>
+        {!routes.length ? (
+          <p className="muted trip-type-empty">No saved routes yet.</p>
+        ) : (
+          <div className="card-list">
+            {routes.map((route) => (
+              <div className="trip-type-row saved-route-row" key={route.id}>
+                <div>
+                  <strong>{route.name}</strong>
+                  <div className="muted saved-route-meta">
+                    Suggested trip type:{' '}
+                    {categoryName(
+                      route.suggestedCategoryId ??
+                        route.suggestedCategory?.id,
+                    )}
+                  </div>
+                </div>
+                <button
+                  className="btn ghost"
+                  onClick={() => void removeRoute(route)}
+                >
+                  Delete
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );

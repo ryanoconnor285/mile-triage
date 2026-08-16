@@ -1,31 +1,21 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Category, DriveStatus, DriveSummary, Vehicle } from '@mile-triage/shared';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { tagForStatus, tripTypesForStatus } from '../category-utils';
 import { DriveCard } from '../components/DriveCard';
-import { DriveClassifyControls } from '../components/DriveClassifyControls';
+import {
+  ClassificationButtons,
+  DriveClassifyControls,
+} from '../components/DriveClassifyControls';
 import {
   driveMissingLocation,
   formatDriveEnd,
   formatDriveStart,
   formatDriveWhen,
 } from '../drive-labels';
-
-function startOfWeek(date: Date) {
-  const d = new Date(date);
-  const day = d.getDay();
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() - day);
-  return d;
-}
-
-function weekLabel(start: Date) {
-  const end = new Date(start);
-  end.setDate(end.getDate() + 6);
-  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
-  return `${start.toLocaleDateString(undefined, opts)} – ${end.toLocaleDateString(undefined, opts)}`;
-}
+import { useDriveSave } from '../hooks/useDriveSave';
+import { groupDrivesByWeek, weekLabel } from '../week-groups';
 
 type Draft = { notes: string; categoryId: string };
 
@@ -62,8 +52,51 @@ export function TriagePage() {
   const [savingEntry, setSavingEntry] = useState(false);
   const [batchCategoryId, setBatchCategoryId] = useState('');
   const [batchNotes, setBatchNotes] = useState('');
+  const [saveRouteDriveId, setSaveRouteDriveId] = useState<string | null>(null);
+  const [saveRouteName, setSaveRouteName] = useState('');
+  const [savingRoute, setSavingRoute] = useState(false);
 
-  const load = async () => {
+  const [sessionClassifiedIds, setSessionClassifiedIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const sessionClassifiedRef = useRef(sessionClassifiedIds);
+  sessionClassifiedRef.current = sessionClassifiedIds;
+
+  const { saveStates, saveDrive, scheduleDetailsSave, markEditing } =
+    useDriveSave(categories);
+
+  const mergeDrive = useCallback((updated: DriveSummary) => {
+    setDrives((prev) => {
+      const idx = prev.findIndex((d) => d.id === updated.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = updated;
+        return next;
+      }
+      return [updated, ...prev].sort(
+        (a, b) =>
+          new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+      );
+    });
+    setDrafts((prev) => ({
+      ...prev,
+      [updated.id]: {
+        notes: updated.notes ?? '',
+        categoryId: updated.categoryId ?? '',
+      },
+    }));
+    if (updated.status !== 'UNCLASSIFIED') {
+      setSessionClassifiedIds((prev) => new Set(prev).add(updated.id));
+    } else {
+      setSessionClassifiedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(updated.id);
+        return next;
+      });
+    }
+  }, []);
+
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const [list, cats, mode, cars] = await Promise.all([
@@ -72,12 +105,25 @@ export function TriagePage() {
         api.authMode(),
         api.vehicles(),
       ]);
-      setDrives(list);
       setCategories(cats);
       setAuthMode(mode.mode);
       setVehicles(cars);
+      setDrives((prev) => {
+        const classified = prev.filter((d) =>
+          sessionClassifiedRef.current.has(d.id),
+        );
+        const unclassifiedIds = new Set(list.map((d) => d.id));
+        const merged = [
+          ...classified.filter((d) => !unclassifiedIds.has(d.id)),
+          ...list,
+        ];
+        return merged.sort(
+          (a, b) =>
+            new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+        );
+      });
       setDrafts((prev) => {
-        const next: Record<string, Draft> = {};
+        const next: Record<string, Draft> = { ...prev };
         for (const d of list) {
           next[d.id] = prev[d.id] ?? {
             notes: d.notes ?? '',
@@ -86,48 +132,45 @@ export function TriagePage() {
         }
         return next;
       });
+      setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load drives');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
+
+  const inboxDrives = useMemo(
+    () => drives.filter((d) => d.status === 'UNCLASSIFIED'),
+    [drives],
+  );
 
   const totalMiles = useMemo(
     () =>
       Number(
-        drives.reduce((sum, d) => sum + (d.distanceMiles ?? 0), 0).toFixed(1),
+        inboxDrives
+          .reduce((sum, d) => sum + (d.distanceMiles ?? 0), 0)
+          .toFixed(1),
       ),
-    [drives],
+    [inboxDrives],
   );
 
-  const weekGroups = useMemo(() => {
-    const map = new Map<string, { start: Date; drives: DriveSummary[] }>();
-    for (const d of drives) {
-      const start = startOfWeek(new Date(d.startedAt));
-      const key = start.toISOString();
-      const group = map.get(key) ?? { start, drives: [] };
-      group.drives.push(d);
-      map.set(key, group);
-    }
-    return [...map.values()].sort(
-      (a, b) => b.start.getTime() - a.start.getTime(),
-    );
-  }, [drives]);
+  const weekGroups = useMemo(() => groupDrivesByWeek(drives), [drives]);
 
   const allSelected =
-    drives.length > 0 && drives.every((d) => selectedIds.has(d.id));
+    inboxDrives.length > 0 &&
+    inboxDrives.every((d) => selectedIds.has(d.id));
 
   const toggleSelectAll = () => {
     if (allSelected) {
       setSelectedIds(new Set());
       return;
     }
-    setSelectedIds(new Set(drives.map((d) => d.id)));
+    setSelectedIds(new Set(inboxDrives.map((d) => d.id)));
   };
 
   const toggleSelect = (id: string) => {
@@ -140,6 +183,7 @@ export function TriagePage() {
   };
 
   const setDraft = (id: string, patch: Partial<Draft>) => {
+    markEditing(id);
     setDrafts((prev) => ({
       ...prev,
       [id]: {
@@ -150,38 +194,74 @@ export function TriagePage() {
     }));
   };
 
-  const classify = async (
+  const classify = (
     id: string,
     status: DriveStatus,
     categoryId?: string | null,
   ) => {
-    const draft = drafts[id] ?? { notes: '', categoryId: '' };
-    const rawTag =
-      categoryId !== undefined ? categoryId : draft.categoryId || null;
-    const tag =
-      status === 'UNCLASSIFIED'
-        ? null
-        : tagForStatus(categories, rawTag, status);
-    await api.updateDrive(id, {
-      status,
-      categoryId: tag,
-      notes: draft.notes.trim() || null,
-    });
-    await load();
+    void saveDrive(
+      id,
+      { status, categoryId: categoryId ?? undefined },
+      drafts,
+      mergeDrive,
+    );
+  };
+
+  const saveDetails = (id: string, status: DriveStatus) => {
+    scheduleDetailsSave(id, status, drafts, mergeDrive);
+  };
+
+  const applyRouteSuggestion = (drive: DriveSummary) => {
+    const suggestion = drive.routeSuggestion;
+    if (!suggestion?.suggestedCategoryId) return;
+    setDraft(drive.id, { categoryId: suggestion.suggestedCategoryId });
+  };
+
+  const openSaveRoute = (drive: DriveSummary) => {
+    const label = `${formatDriveStart(drive)} → ${formatDriveEnd(drive)}`;
+    setSaveRouteName(label.slice(0, 80));
+    setSaveRouteDriveId(drive.id);
+  };
+
+  const submitSaveRoute = async () => {
+    if (!saveRouteDriveId || !saveRouteName.trim()) return;
+    const drive = drives.find((d) => d.id === saveRouteDriveId);
+    setSavingRoute(true);
+    setError(null);
+    try {
+      await api.createRoute({
+        name: saveRouteName.trim(),
+        driveId: saveRouteDriveId,
+        suggestedCategoryId: drive?.categoryId ?? null,
+      });
+      setSaveRouteDriveId(null);
+      setSaveRouteName('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save route');
+    } finally {
+      setSavingRoute(false);
+    }
   };
 
   const classifyBatch = async (status: 'BUSINESS' | 'PERSONAL') => {
     const ids = [...selectedIds];
     if (!ids.length) return;
-    await api.batchClassify(ids, {
-      status,
-      categoryId: tagForStatus(categories, batchCategoryId, status),
-      notes: batchNotes.trim() || null,
-    });
-    setSelectedIds(new Set());
-    setBatchCategoryId('');
-    setBatchNotes('');
-    await load();
+    try {
+      await api.batchClassify(ids, {
+        status,
+        categoryId: tagForStatus(categories, batchCategoryId, status),
+        notes: batchNotes.trim() || null,
+      });
+      const refreshed = await Promise.all(ids.map((id) => api.drive(id)));
+      for (const updated of refreshed) {
+        mergeDrive(updated);
+      }
+      setSelectedIds(new Set());
+      setBatchCategoryId('');
+      setBatchNotes('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Batch classify failed');
+    }
   };
 
   const entryTripTypes = entry.status
@@ -197,7 +277,7 @@ export function TriagePage() {
     setSavingEntry(true);
     setError(null);
     try {
-      await api.createDrive({
+      const created = await api.createDrive({
         date: entry.date,
         distanceMiles: miles,
         status: entry.status || undefined,
@@ -209,7 +289,18 @@ export function TriagePage() {
       });
       setEntry(emptyEntry());
       setEntryOpen(false);
-      await load();
+      if (created.status === 'UNCLASSIFIED') {
+        mergeDrive(created);
+        setDrafts((prev) => ({
+          ...prev,
+          [created.id]: {
+            notes: created.notes ?? '',
+            categoryId: created.categoryId ?? '',
+          },
+        }));
+      } else {
+        mergeDrive(created);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not add drive');
     } finally {
@@ -230,18 +321,48 @@ export function TriagePage() {
     }
   };
 
+  const renderDriveCard = (d: DriveSummary, selectable?: boolean) => {
+    const draft = drafts[d.id] ?? { notes: '', categoryId: '' };
+    const saved = sessionClassifiedIds.has(d.id);
+    return (
+      <DriveCard
+        key={d.id}
+        drive={d}
+        categories={categories}
+        notes={draft.notes}
+        categoryId={draft.categoryId}
+        saveState={saveStates[d.id]}
+        saved={saved}
+        selectable={selectable && d.status === 'UNCLASSIFIED'}
+        selected={selectedIds.has(d.id)}
+        onSelect={() => toggleSelect(d.id)}
+        onNotesChange={(notes) => setDraft(d.id, { notes })}
+        onCategoryChange={(categoryId) => setDraft(d.id, { categoryId })}
+        onClassify={(status, categoryId) => classify(d.id, status, categoryId)}
+        onSaveDetails={() => saveDetails(d.id, d.status)}
+        onApplyRouteSuggestion={() => applyRouteSuggestion(d)}
+        onSaveAsRoute={() => openSaveRoute(d)}
+      />
+    );
+  };
+
   const renderDriveRow = (d: DriveSummary) => {
     const draft = drafts[d.id] ?? { notes: '', categoryId: '' };
     const missingLocation = driveMissingLocation(d);
     return (
-      <tr key={d.id}>
+      <tr
+        key={d.id}
+        className={sessionClassifiedIds.has(d.id) ? 'row-saved' : ''}
+      >
         <td className="col-check">
-          <input
-            type="checkbox"
-            checked={selectedIds.has(d.id)}
-            onChange={() => toggleSelect(d.id)}
-            aria-label={`Select drive on ${formatDriveWhen(d.startedAt)}`}
-          />
+          {d.status === 'UNCLASSIFIED' ? (
+            <input
+              type="checkbox"
+              checked={selectedIds.has(d.id)}
+              onChange={() => toggleSelect(d.id)}
+              aria-label={`Select drive on ${formatDriveWhen(d.startedAt)}`}
+            />
+          ) : null}
         </td>
         <td className="col-when">{formatDriveWhen(d.startedAt)}</td>
         <td className="col-place" title={formatDriveStart(d)}>
@@ -253,16 +374,30 @@ export function TriagePage() {
         <td className="col-num">{d.distanceMiles?.toFixed(1) ?? '—'}</td>
         <td className="col-vehicle">{d.vehicleName ?? '—'}</td>
         <td className="col-classify">
+          {d.routeSuggestion && (
+            <div className="route-suggestion table-route-suggestion">
+              <button
+                type="button"
+                className="route-suggestion-chip"
+                onClick={() => applyRouteSuggestion(d)}
+              >
+                {d.routeSuggestion.routeName}
+              </button>
+            </div>
+          )}
           <DriveClassifyControls
             compact
             categories={categories}
             notes={draft.notes}
             categoryId={draft.categoryId}
+            currentStatus={d.status}
+            saveState={saveStates[d.id]}
             onNotesChange={(notes) => setDraft(d.id, { notes })}
             onCategoryChange={(categoryId) => setDraft(d.id, { categoryId })}
             onClassify={(status, categoryId) =>
-              void classify(d.id, status, categoryId)
+              classify(d.id, status, categoryId)
             }
+            onSaveDetails={() => saveDetails(d.id, d.status)}
           />
           {missingLocation && (
             <span className="row-hint">No GPS on file</span>
@@ -279,7 +414,7 @@ export function TriagePage() {
           <div>
             <h2>Unclassified</h2>
             <div className="muted">
-              {drives.length} drives · {totalMiles} mi
+              {inboxDrives.length} drives · {totalMiles} mi
             </div>
           </div>
           <div className="actions panel-actions">
@@ -333,23 +468,14 @@ export function TriagePage() {
                   onChange={(e) => setEntry({ ...entry, miles: e.target.value })}
                 />
               </label>
-              <label>
+              <label className="entry-wide">
                 <span className="muted">Classification</span>
-                <select
-                  className="purpose-input"
+                <ClassificationButtons
                   value={entry.status}
-                  onChange={(e) =>
-                    setEntry({
-                      ...entry,
-                      status: e.target.value as '' | 'BUSINESS' | 'PERSONAL',
-                      categoryId: '',
-                    })
+                  onChange={(status) =>
+                    setEntry({ ...entry, status, categoryId: '' })
                   }
-                >
-                  <option value="">Decide later</option>
-                  <option value="BUSINESS">Business</option>
-                  <option value="PERSONAL">Personal</option>
-                </select>
+                />
               </label>
               {entry.status && (
                 <label>
@@ -447,33 +573,19 @@ export function TriagePage() {
             </p>
           )}
 
+          {sessionClassifiedIds.size > 0 && inboxDrives.length > 0 && (
+            <div className="session-saved-banner muted">
+              {sessionClassifiedIds.size} classified this session — refresh to
+              clear from inbox
+            </div>
+          )}
+
           {drives.length > 0 && (
             <div className="drive-cards mobile-only">
               {weekGroups.map((group) => (
                 <Fragment key={group.start.toISOString()}>
                   <div className="week-label">{weekLabel(group.start)}</div>
-                  {group.drives.map((d) => {
-                    const draft = drafts[d.id] ?? { notes: '', categoryId: '' };
-                    return (
-                      <DriveCard
-                        key={d.id}
-                        drive={d}
-                        categories={categories}
-                        notes={draft.notes}
-                        categoryId={draft.categoryId}
-                        selectable
-                        selected={selectedIds.has(d.id)}
-                        onSelect={() => toggleSelect(d.id)}
-                        onNotesChange={(notes) => setDraft(d.id, { notes })}
-                        onCategoryChange={(categoryId) =>
-                          setDraft(d.id, { categoryId })
-                        }
-                        onClassify={(status, categoryId) =>
-                          void classify(d.id, status, categoryId)
-                        }
-                      />
-                    );
-                  })}
+                  {group.drives.map((d) => renderDriveCard(d, true))}
                 </Fragment>
               ))}
             </div>
@@ -566,6 +678,46 @@ export function TriagePage() {
                 onClick={() => void classifyBatch('PERSONAL')}
               >
                 Personal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {saveRouteDriveId && (
+        <div className="modal-backdrop" onClick={() => setSaveRouteDriveId(null)}>
+          <div
+            className="modal-card"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-labelledby="save-route-title"
+          >
+            <h3 id="save-route-title">Save as route</h3>
+            <p className="muted">
+              Name this trip pattern for quick suggestions next time.
+            </p>
+            <label>
+              <span className="muted">Route name</span>
+              <input
+                className="purpose-input"
+                value={saveRouteName}
+                onChange={(e) => setSaveRouteName(e.target.value)}
+                autoFocus
+              />
+            </label>
+            <div className="actions modal-actions">
+              <button
+                className="btn ghost"
+                onClick={() => setSaveRouteDriveId(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn"
+                disabled={savingRoute || !saveRouteName.trim()}
+                onClick={() => void submitSaveRoute()}
+              >
+                {savingRoute ? 'Saving…' : 'Save route'}
               </button>
             </div>
           </div>

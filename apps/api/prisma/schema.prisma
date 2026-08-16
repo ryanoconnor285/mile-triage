@@ -32,6 +32,7 @@ model User {
   vehicles              Vehicle[]
   drives                Drive[]
   categories            Category[]
+  savedRoutes           SavedRoute[]
   settings              AppSettings?
   sessions              Session[]
 }
@@ -91,6 +92,7 @@ model Category {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   drives      Drive[]
+  savedRoutes SavedRoute[]
 
   @@unique([userId, name])
   @@index([userId, sortOrder])
@@ -163,4 +165,25 @@ model AppSettings {
   mileageRate  Float  @default(0.70)
   timezone     String @default("America/New_York")
   weekStartsOn Int    @default(0)
+}
+
+model SavedRoute {
+  id                  String    @id @default(cuid())
+  userId              String
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                String
+  startLat            Float
+  startLng            Float
+  endLat              Float
+  endLng              Float
+  radiusMiles         Float     @default(0.35)
+  startKeywords       String?
+  endKeywords         String?
+  suggestedCategoryId String?
+  suggestedCategory   Category? @relation(fields: [suggestedCategoryId], references: [id], onDelete: SetNull)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@unique([userId, name])
+  @@index([userId])
 }

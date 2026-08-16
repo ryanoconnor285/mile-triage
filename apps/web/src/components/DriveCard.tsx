@@ -1,13 +1,16 @@
+import { useState } from 'react';
 import type { Category, DriveStatus, DriveSummary } from '@mile-triage/shared';
 import {
   driveMissingLocation,
-  formatDriveRoute,
+  formatDriveEnd,
+  formatDriveStart,
   formatDriveStatus,
   formatDriveWhen,
   formatTripType,
   statusClass,
 } from '../drive-labels';
 import { isSystemTripType } from '../category-utils';
+import type { SaveState } from '../hooks/useDriveSave';
 import { DriveClassifyControls } from './DriveClassifyControls';
 
 type Props = {
@@ -15,6 +18,8 @@ type Props = {
   categories: Category[];
   notes: string;
   categoryId: string;
+  saveState?: SaveState;
+  saved?: boolean;
   selectable?: boolean;
   selected?: boolean;
   onSelect?: () => void;
@@ -22,6 +27,9 @@ type Props = {
   onNotesChange: (notes: string) => void;
   onCategoryChange: (categoryId: string) => void;
   onClassify: (status: DriveStatus, categoryId?: string | null) => void;
+  onSaveDetails?: () => void;
+  onApplyRouteSuggestion?: () => void;
+  onSaveAsRoute?: () => void;
 };
 
 export function DriveCard({
@@ -29,6 +37,8 @@ export function DriveCard({
   categories,
   notes,
   categoryId,
+  saveState,
+  saved,
   selectable,
   selected,
   onSelect,
@@ -36,11 +46,17 @@ export function DriveCard({
   onNotesChange,
   onCategoryChange,
   onClassify,
+  onSaveDetails,
+  onApplyRouteSuggestion,
+  onSaveAsRoute,
 }: Props) {
+  const [expanded, setExpanded] = useState(false);
   const missingLocation = driveMissingLocation(drive);
 
   return (
-    <article className="drive-card">
+    <article
+      className={`drive-card ${saved || saveState === 'saved' ? 'is-saved' : ''}`}
+    >
       <div className="drive-card-head">
         {selectable && (
           <input
@@ -58,11 +74,36 @@ export function DriveCard({
               {drive.distanceMiles?.toFixed(1) ?? '—'} mi
             </span>
           </div>
-          <div className="drive-card-route" title={formatDriveRoute(drive)}>
-            {formatDriveRoute(drive)}
-          </div>
+          <button
+            type="button"
+            className="drive-card-route-btn"
+            onClick={() => setExpanded((e) => !e)}
+            aria-expanded={expanded}
+          >
+            <span className="drive-card-route-from">{formatDriveStart(drive)}</span>
+            <span className="drive-card-route-arrow">→</span>
+            <span className="drive-card-route-to">{formatDriveEnd(drive)}</span>
+          </button>
+          {expanded && (
+            <div className="drive-card-route-expanded muted">
+              <div>{formatDriveStart(drive)}</div>
+              <div>{formatDriveEnd(drive)}</div>
+            </div>
+          )}
           {drive.vehicleName && (
             <div className="drive-card-vehicle muted">{drive.vehicleName}</div>
+          )}
+          {drive.routeSuggestion && (
+            <div className="route-suggestion">
+              <span className="muted">Suggested:</span>{' '}
+              <button
+                type="button"
+                className="route-suggestion-chip"
+                onClick={onApplyRouteSuggestion}
+              >
+                {drive.routeSuggestion.routeName}
+              </button>
+            </div>
           )}
           {drive.status !== 'UNCLASSIFIED' && (
             <div className="drive-card-badges">
@@ -84,6 +125,15 @@ export function DriveCard({
               Purpose (legacy): {drive.purposeNote}
             </div>
           )}
+          {onSaveAsRoute && drive.startLat != null && (
+            <button
+              type="button"
+              className="btn ghost save-route-btn"
+              onClick={onSaveAsRoute}
+            >
+              Save as route
+            </button>
+          )}
         </div>
       </div>
       <DriveClassifyControls
@@ -91,10 +141,12 @@ export function DriveCard({
         notes={notes}
         categoryId={categoryId}
         currentStatus={drive.status}
+        saveState={saveState}
         showUnclassified={showUnclassified}
         onNotesChange={onNotesChange}
         onCategoryChange={onCategoryChange}
         onClassify={onClassify}
+        onSaveDetails={onSaveDetails}
       />
     </article>
   );
