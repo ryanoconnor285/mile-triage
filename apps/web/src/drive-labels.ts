@@ -1,3 +1,6 @@
+import type { DriveStatus } from '@mile-triage/shared';
+import { isSystemTripType } from './category-utils';
+
 type EndpointDrive = {
   startAddress?: string | null;
   endAddress?: string | null;
@@ -42,6 +45,23 @@ export function formatDriveWhen(iso: string): string {
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+export function formatDriveStatus(status: DriveStatus): string {
+  if (status === 'BUSINESS') return 'Business';
+  if (status === 'PERSONAL') return 'Personal';
+  return 'Unclassified';
+}
+
+export function formatTripType(name: string | null | undefined): string {
+  if (!name || isSystemTripType(name)) return '—';
+  return name;
+}
+
+export function statusClass(status: DriveStatus): string {
+  if (status === 'BUSINESS') return 'biz';
+  if (status === 'PERSONAL') return 'per';
+  return 'unclassified';
 }
 
 /** True when a car-recorded drive has neither addresses nor coordinates yet. */

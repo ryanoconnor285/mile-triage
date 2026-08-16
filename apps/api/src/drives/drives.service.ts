@@ -63,8 +63,6 @@ export class DrivesService {
   }
 
   async create(userId: string, body: CreateDrive) {
-    // Anchor to midday UTC so the drive can't shift to the neighbouring day
-    // when rendered in the user's timezone.
     const startedAt = new Date(`${body.date}T12:00:00.000Z`);
     if (Number.isNaN(startedAt.getTime())) {
       throw new BadRequestException('Invalid date');
@@ -78,10 +76,25 @@ export class DrivesService {
       if (!owned) throw new NotFoundException('Vehicle not found');
     }
 
-    const resolved =
-      body.categoryId === undefined || body.categoryId === null
-        ? { categoryId: null, status: DriveStatus.UNCLASSIFIED }
-        : await this.categories.resolveForClassify(userId, body.categoryId);
+    let status: DriveStatus = body.status ?? DriveStatus.UNCLASSIFIED;
+    let categoryId: string | null = null;
+
+    if (body.categoryId) {
+      const tag = await this.categories.getTag(userId, body.categoryId);
+      if (body.status) {
+        this.categories.assertTagMatchesStatus(tag, body.status);
+        categoryId = tag.id;
+      } else {
+        const resolved = await this.categories.resolveForClassify(
+          userId,
+          body.categoryId,
+        );
+        status = resolved.status;
+        categoryId = resolved.categoryId;
+      }
+    } else if (body.status && body.status !== 'UNCLASSIFIED') {
+      status = body.status;
+    }
 
     const drive = await this.prisma.drive.create({
       data: {
@@ -89,11 +102,10 @@ export class DrivesService {
         vehicleId: body.vehicleId ?? null,
         source: 'MANUAL',
         startedAt,
-        // Reports only count finished drives, so a manual entry is complete on arrival.
         endedAt: startedAt,
         distanceMiles: body.distanceMiles,
-        categoryId: resolved.categoryId,
-        status: resolved.status,
+        categoryId,
+        status,
         purposeNote: body.purposeNote ?? null,
         notes: body.notes ?? null,
         startAddress: body.startAddress ?? null,
@@ -121,33 +133,53 @@ export class DrivesService {
   }
 
   async classify(userId: string, id: string, body: ClassifyDrive) {
-    const drive = await this.prisma.drive.findFirst({ where: { id, userId } });
+    const drive = await this.prisma.drive.findFirst({
+      where: { id, userId },
+      include: { category: true },
+    });
     if (!drive) throw new NotFoundException('Drive not found');
 
     let categoryId = drive.categoryId;
     let status = drive.status;
 
-    if (body.categoryId !== undefined) {
-      const resolved = await this.categories.resolveForClassify(
-        userId,
-        body.categoryId,
-      );
-      categoryId = resolved.categoryId;
-      status = resolved.status;
-    } else if (body.status === 'UNCLASSIFIED') {
-      categoryId = null;
-      status = 'UNCLASSIFIED';
-    } else if (body.status === 'BUSINESS' || body.status === 'PERSONAL') {
-      await this.categories.ensureDefaults(userId);
-      const cat = await this.prisma.category.findFirst({
-        where: {
-          userId,
-          deductible: body.status === 'BUSINESS',
-          name: body.status === 'BUSINESS' ? 'Business' : 'Personal',
-        },
-      });
-      categoryId = cat?.id ?? null;
+    if (body.status !== undefined) {
       status = body.status;
+      if (body.status === 'UNCLASSIFIED') {
+        categoryId = null;
+      }
+    }
+
+    if (body.categoryId !== undefined) {
+      if (body.categoryId === null) {
+        categoryId = null;
+      } else {
+        const tag = await this.categories.getTag(userId, body.categoryId);
+        if (body.status !== undefined) {
+          this.categories.assertTagMatchesStatus(tag, body.status);
+          categoryId = tag.id;
+        } else if (status === 'BUSINESS' || status === 'PERSONAL') {
+          this.categories.assertTagMatchesStatus(tag, status);
+          categoryId = tag.id;
+        } else {
+          const resolved = await this.categories.resolveForClassify(
+            userId,
+            body.categoryId,
+          );
+          categoryId = resolved.categoryId;
+          status = resolved.status;
+        }
+      }
+    } else if (
+      body.status !== undefined &&
+      body.status !== 'UNCLASSIFIED' &&
+      categoryId &&
+      drive.category
+    ) {
+      try {
+        this.categories.assertTagMatchesStatus(drive.category, body.status);
+      } catch {
+        categoryId = null;
+      }
     }
 
     const updated = await this.prisma.drive.update({
@@ -165,19 +197,13 @@ export class DrivesService {
   }
 
   async batchClassify(userId: string, body: BatchClassify) {
-    const resolved = await this.categories.resolveForClassify(
-      userId,
-      body.categoryId,
-    );
-    await this.prisma.drive.updateMany({
-      where: { userId, id: { in: body.driveIds } },
-      data: {
-        categoryId: resolved.categoryId,
-        status: resolved.status,
-        purposeNote:
-          body.purposeNote === undefined ? undefined : body.purposeNote,
-      },
-    });
+    for (const driveId of body.driveIds) {
+      await this.classify(userId, driveId, {
+        status: body.status,
+        categoryId: body.categoryId,
+        notes: body.notes,
+      });
+    }
     return this.list(userId, { status: 'UNCLASSIFIED' });
   }
 

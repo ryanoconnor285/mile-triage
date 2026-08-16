@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 
 export function LandingPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [mode, setMode] = useState<'mock' | 'tesla' | null>(null);
   const [busy, setBusy] = useState(false);
+  const signupBlocked = searchParams.get('signup') === 'blocked';
 
   useEffect(() => {
     void api
@@ -37,20 +39,27 @@ export function LandingPage() {
         </div>
         <h1>Weekly miles. Thirty seconds.</h1>
         <p>
-          Pull Tesla telematics automatically, then triage business vs personal
-          drives on a map — no phone GPS drain, no forgotten trips.
+          Pull Tesla telematics automatically, then classify business vs personal
+          drives from your phone — no phone GPS drain, no forgotten trips.
         </p>
+        {signupBlocked && (
+          <p style={{ color: 'var(--danger)', marginBottom: '1rem' }}>
+            MileTriage is in private beta. Sign-up is limited to invited accounts.
+          </p>
+        )}
         <div className="actions">
-          <button
-            className="btn"
-            type="button"
-            disabled={busy}
-            onClick={() => void continueDemo()}
-          >
-            {busy ? 'Signing in…' : 'Continue with demo'}
-          </button>
+          {mode === 'mock' && (
+            <button
+              className="btn"
+              type="button"
+              disabled={busy}
+              onClick={() => void continueDemo()}
+            >
+              {busy ? 'Signing in…' : 'Continue with demo'}
+            </button>
+          )}
           {mode === 'tesla' ? (
-            <a className="btn secondary" href="/api/auth/tesla">
+            <a className="btn" href="/api/auth/tesla">
               Connect Tesla
             </a>
           ) : (
@@ -72,6 +81,11 @@ export function LandingPage() {
         {mode === 'mock' && (
           <p className="muted" style={{ marginTop: '1rem' }}>
             Running in demo mode — no Tesla developer app required.
+          </p>
+        )}
+        {mode === 'tesla' && (
+          <p className="muted" style={{ marginTop: '1rem' }}>
+            Private beta — connect with an invited Tesla account.
           </p>
         )}
       </div>

@@ -33,10 +33,10 @@ function Shell() {
           <img className="brand-mark" src="/favicon.svg" alt="" />
           MileTriage
         </NavLink>
-        <nav className="nav">
+        <nav className="nav desktop-nav">
           <NavLink to="/triage">Triage</NavLink>
           <NavLink to="/history">History</NavLink>
-          <NavLink to="/categories">Categories</NavLink>
+          <NavLink to="/trip-types">Trip types</NavLink>
           <NavLink to="/onboarding">Vehicles</NavLink>
           <NavLink to="/reports">Reports</NavLink>
           <button
@@ -50,8 +50,25 @@ function Shell() {
             Log out
           </button>
         </nav>
+        <button
+          className="btn ghost mobile-logout"
+          onClick={() =>
+            void api.logout().then(() => {
+              window.location.href = '/';
+            })
+          }
+        >
+          Log out
+        </button>
       </header>
       <Outlet />
+      <nav className="bottom-nav" aria-label="Main">
+        <NavLink to="/triage">Triage</NavLink>
+        <NavLink to="/history">History</NavLink>
+        <NavLink to="/trip-types">Types</NavLink>
+        <NavLink to="/reports">Reports</NavLink>
+        <NavLink to="/onboarding">Vehicles</NavLink>
+      </nav>
     </div>
   );
 }
@@ -63,7 +80,8 @@ export default function App() {
       <Route element={<Shell />}>
         <Route path="/triage" element={<TriagePage />} />
         <Route path="/history" element={<HistoryPage />} />
-        <Route path="/categories" element={<CategoriesPage />} />
+        <Route path="/trip-types" element={<CategoriesPage />} />
+        <Route path="/categories" element={<Navigate to="/trip-types" replace />} />
         <Route path="/onboarding" element={<OnboardingPage />} />
         <Route path="/reports" element={<ReportsPage />} />
       </Route>

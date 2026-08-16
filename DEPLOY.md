@@ -50,6 +50,8 @@ GitHub = Railway builds from this repo using our Dockerfiles.
 | `INTERNAL_TELEMETRY_SECRET` | long random string |
 | `SESSION_SECRET` | long random string |
 | `DEFAULT_MILEAGE_RATE` | `0.70` |
+| `SIGNUP_MODE` | `allowlist` for private beta, `open` when launching publicly |
+| `ALLOWED_EMAILS` | Comma-separated Tesla account emails (e.g. `you@example.com,spouse@example.com`) — required when `SIGNUP_MODE=allowlist` |
 
 4. Networking: generate a domain **or** leave private if web proxies via private network.
 5. Disable **Serverless / App Sleeping** on this service.
@@ -115,6 +117,8 @@ it to the **web** service under Settings → Networking → Custom Domain.
    - `TESLA_DOMAIN=YOUR_DOMAIN` (bare hostname)
    - `TESLA_PUBLIC_KEY_PEM` = contents of `keys/public-key.pem`
    - `WEB_ORIGIN=https://YOUR_DOMAIN`
+   - `SIGNUP_MODE=allowlist`
+   - `ALLOWED_EMAILS=your@email.com,spouse@email.com`
 5. Verify `https://YOUR_DOMAIN/.well-known/appspecific/com.tesla.3p.public-key.pem`
    returns the PEM
 6. `npm run tesla:register` (once per region; verifies the hosted key first)

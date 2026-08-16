@@ -1,5 +1,6 @@
 import {
   Controller,
+  ForbiddenException,
   Get,
   Post,
   Query,
@@ -53,11 +54,19 @@ export class AuthController {
     if (!code || !state || !expected || state !== expected) {
       throw new UnauthorizedException('Invalid OAuth state');
     }
-    const { token, expiresAt } = await this.auth.handleTeslaCallback(code);
-    this.setSessionCookie(req, res, token, expiresAt);
-    res.clearCookie('mile_oauth_state', { path: '/' });
     const webOrigin = webOriginFromEnv(this.config.get<string>('WEB_ORIGIN'));
-    return res.redirect(`${webOrigin}/onboarding`);
+    try {
+      const { token, expiresAt } = await this.auth.handleTeslaCallback(code);
+      this.setSessionCookie(req, res, token, expiresAt);
+      res.clearCookie('mile_oauth_state', { path: '/' });
+      return res.redirect(`${webOrigin}/onboarding`);
+    } catch (err) {
+      res.clearCookie('mile_oauth_state', { path: '/' });
+      if (err instanceof ForbiddenException) {
+        return res.redirect(`${webOrigin}/?signup=blocked`);
+      }
+      throw err;
+    }
   }
 
   @Get('mock')
@@ -66,6 +75,9 @@ export class AuthController {
     @Res() res: Response,
     @Query('json') json?: string,
   ) {
+    if (this.auth.getAuthMode() === 'tesla') {
+      throw new ForbiddenException('Demo login is disabled');
+    }
     const { token, expiresAt } = await this.auth.loginWithMock();
     this.setSessionCookie(req, res, token, expiresAt);
     if (json === '1') {

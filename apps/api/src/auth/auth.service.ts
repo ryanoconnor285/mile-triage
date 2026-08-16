@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DEFAULT_MILEAGE_RATE } from '@mile-triage/shared';
 import { CryptoService } from '../common/crypto.service';
@@ -216,6 +216,14 @@ export class AuthService {
       this.crypto.hashToken(tokens.access_token).slice(0, 24);
     const email = this.decodeEmail(tokens.id_token);
 
+    const existing = await this.prisma.user.findUnique({
+      where: { teslaUserId },
+      select: { id: true },
+    });
+    if (!existing) {
+      this.assertSignupAllowed(email);
+    }
+
     const user = await this.prisma.user.upsert({
       where: { teslaUserId },
       create: {
@@ -281,5 +289,31 @@ export class AuthService {
     } catch {
       return null;
     }
+  }
+
+  /** When SIGNUP_MODE=allowlist, only ALLOWED_EMAILS may create new accounts. */
+  private assertSignupAllowed(email: string | null) {
+    const mode = (this.config.get<string>('SIGNUP_MODE') ?? 'open').toLowerCase();
+    if (mode !== 'allowlist') return;
+
+    const allowed = this.allowedEmails();
+    if (!allowed.size) {
+      throw new ForbiddenException('Sign-up is not available');
+    }
+
+    const normalized = email?.trim().toLowerCase() ?? '';
+    if (!normalized || !allowed.has(normalized)) {
+      throw new ForbiddenException('MileTriage is in private beta');
+    }
+  }
+
+  private allowedEmails(): Set<string> {
+    const raw = this.config.get<string>('ALLOWED_EMAILS') ?? '';
+    return new Set(
+      raw
+        .split(',')
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean),
+    );
   }
 }

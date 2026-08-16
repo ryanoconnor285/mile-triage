@@ -1,7 +1,10 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import type { Category, DriveSummary, Vehicle } from '@mile-triage/shared';
+import type { Category, DriveStatus, DriveSummary, Vehicle } from '@mile-triage/shared';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import { tagForStatus, tripTypesForStatus } from '../category-utils';
+import { DriveCard } from '../components/DriveCard';
+import { DriveClassifyControls } from '../components/DriveClassifyControls';
 import {
   driveMissingLocation,
   formatDriveEnd,
@@ -24,7 +27,7 @@ function weekLabel(start: Date) {
   return `${start.toLocaleDateString(undefined, opts)} – ${end.toLocaleDateString(undefined, opts)}`;
 }
 
-type Draft = { purposeNote: string; notes: string };
+type Draft = { notes: string; categoryId: string };
 
 function todayLocal() {
   const now = new Date();
@@ -36,8 +39,9 @@ function todayLocal() {
 const emptyEntry = () => ({
   date: todayLocal(),
   miles: '',
+  status: '' as '' | 'BUSINESS' | 'PERSONAL',
   categoryId: '',
-  purposeNote: '',
+  notes: '',
   startAddress: '',
   endAddress: '',
   vehicleId: '',
@@ -56,6 +60,8 @@ export function TriagePage() {
   const [entryOpen, setEntryOpen] = useState(false);
   const [entry, setEntry] = useState(emptyEntry);
   const [savingEntry, setSavingEntry] = useState(false);
+  const [batchCategoryId, setBatchCategoryId] = useState('');
+  const [batchNotes, setBatchNotes] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -74,8 +80,8 @@ export function TriagePage() {
         const next: Record<string, Draft> = {};
         for (const d of list) {
           next[d.id] = prev[d.id] ?? {
-            purposeNote: d.purposeNote ?? '',
             notes: d.notes ?? '',
+            categoryId: d.categoryId ?? '',
           };
         }
         return next;
@@ -137,40 +143,50 @@ export function TriagePage() {
     setDrafts((prev) => ({
       ...prev,
       [id]: {
-        purposeNote: prev[id]?.purposeNote ?? '',
         notes: prev[id]?.notes ?? '',
+        categoryId: prev[id]?.categoryId ?? '',
         ...patch,
       },
     }));
   };
 
-  const classify = async (id: string, categoryId: string | null) => {
-    if (!categoryId) return;
-    const draft = drafts[id] ?? { purposeNote: '', notes: '' };
+  const classify = async (
+    id: string,
+    status: DriveStatus,
+    categoryId?: string | null,
+  ) => {
+    const draft = drafts[id] ?? { notes: '', categoryId: '' };
+    const rawTag =
+      categoryId !== undefined ? categoryId : draft.categoryId || null;
+    const tag =
+      status === 'UNCLASSIFIED'
+        ? null
+        : tagForStatus(categories, rawTag, status);
     await api.updateDrive(id, {
-      categoryId,
-      purposeNote: draft.purposeNote.trim() || null,
+      status,
+      categoryId: tag,
       notes: draft.notes.trim() || null,
     });
     await load();
   };
 
-  const classifyBatch = async (categoryId: string | null) => {
+  const classifyBatch = async (status: 'BUSINESS' | 'PERSONAL') => {
     const ids = [...selectedIds];
-    if (!ids.length || !categoryId) return;
-    await Promise.all(
-      ids.map((id) => {
-        const draft = drafts[id] ?? { purposeNote: '', notes: '' };
-        return api.updateDrive(id, {
-          purposeNote: draft.purposeNote.trim() || null,
-          notes: draft.notes.trim() || null,
-        });
-      }),
-    );
-    await api.batchClassify(ids, categoryId);
+    if (!ids.length) return;
+    await api.batchClassify(ids, {
+      status,
+      categoryId: tagForStatus(categories, batchCategoryId, status),
+      notes: batchNotes.trim() || null,
+    });
     setSelectedIds(new Set());
+    setBatchCategoryId('');
+    setBatchNotes('');
     await load();
   };
+
+  const entryTripTypes = entry.status
+    ? tripTypesForStatus(categories, entry.status)
+    : [];
 
   const addDrive = async () => {
     const miles = Number(entry.miles);
@@ -184,9 +200,10 @@ export function TriagePage() {
       await api.createDrive({
         date: entry.date,
         distanceMiles: miles,
+        status: entry.status || undefined,
         categoryId: entry.categoryId || null,
         vehicleId: entry.vehicleId || null,
-        purposeNote: entry.purposeNote.trim() || null,
+        notes: entry.notes.trim() || null,
         startAddress: entry.startAddress.trim() || null,
         endAddress: entry.endAddress.trim() || null,
       });
@@ -213,6 +230,48 @@ export function TriagePage() {
     }
   };
 
+  const renderDriveRow = (d: DriveSummary) => {
+    const draft = drafts[d.id] ?? { notes: '', categoryId: '' };
+    const missingLocation = driveMissingLocation(d);
+    return (
+      <tr key={d.id}>
+        <td className="col-check">
+          <input
+            type="checkbox"
+            checked={selectedIds.has(d.id)}
+            onChange={() => toggleSelect(d.id)}
+            aria-label={`Select drive on ${formatDriveWhen(d.startedAt)}`}
+          />
+        </td>
+        <td className="col-when">{formatDriveWhen(d.startedAt)}</td>
+        <td className="col-place" title={formatDriveStart(d)}>
+          {formatDriveStart(d)}
+        </td>
+        <td className="col-place" title={formatDriveEnd(d)}>
+          {formatDriveEnd(d)}
+        </td>
+        <td className="col-num">{d.distanceMiles?.toFixed(1) ?? '—'}</td>
+        <td className="col-vehicle">{d.vehicleName ?? '—'}</td>
+        <td className="col-classify">
+          <DriveClassifyControls
+            compact
+            categories={categories}
+            notes={draft.notes}
+            categoryId={draft.categoryId}
+            onNotesChange={(notes) => setDraft(d.id, { notes })}
+            onCategoryChange={(categoryId) => setDraft(d.id, { categoryId })}
+            onClassify={(status, categoryId) =>
+              void classify(d.id, status, categoryId)
+            }
+          />
+          {missingLocation && (
+            <span className="row-hint">No GPS on file</span>
+          )}
+        </td>
+      </tr>
+    );
+  };
+
   return (
     <div className="page drive-workspace">
       <section className="panel">
@@ -223,7 +282,7 @@ export function TriagePage() {
               {drives.length} drives · {totalMiles} mi
             </div>
           </div>
-          <div className="actions">
+          <div className="actions panel-actions">
             <button
               className="btn ghost"
               onClick={() => setEntryOpen((open) => !open)}
@@ -239,8 +298,8 @@ export function TriagePage() {
                 {simulating ? 'Simulating…' : 'Simulate drive'}
               </button>
             )}
-            <Link className="btn ghost" to="/categories">
-              Categories
+            <Link className="btn ghost desktop-only" to="/trip-types">
+              Trip types
             </Link>
           </div>
         </div>
@@ -275,22 +334,42 @@ export function TriagePage() {
                 />
               </label>
               <label>
-                <span className="muted">Category</span>
+                <span className="muted">Classification</span>
                 <select
                   className="purpose-input"
-                  value={entry.categoryId}
+                  value={entry.status}
                   onChange={(e) =>
-                    setEntry({ ...entry, categoryId: e.target.value })
+                    setEntry({
+                      ...entry,
+                      status: e.target.value as '' | 'BUSINESS' | 'PERSONAL',
+                      categoryId: '',
+                    })
                   }
                 >
                   <option value="">Decide later</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
+                  <option value="BUSINESS">Business</option>
+                  <option value="PERSONAL">Personal</option>
                 </select>
               </label>
+              {entry.status && (
+                <label>
+                  <span className="muted">Trip type</span>
+                  <select
+                    className="purpose-input"
+                    value={entry.categoryId}
+                    onChange={(e) =>
+                      setEntry({ ...entry, categoryId: e.target.value })
+                    }
+                  >
+                    <option value="">None</option>
+                    {entryTripTypes.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               {vehicles.length > 0 && (
                 <label>
                   <span className="muted">Vehicle</span>
@@ -333,14 +412,11 @@ export function TriagePage() {
                 />
               </label>
               <label className="entry-wide">
-                <span className="muted">Purpose</span>
+                <span className="muted">Notes</span>
                 <input
                   className="purpose-input"
-                  placeholder="Client meeting, site visit…"
-                  value={entry.purposeNote}
-                  onChange={(e) =>
-                    setEntry({ ...entry, purposeNote: e.target.value })
-                  }
+                  value={entry.notes}
+                  onChange={(e) => setEntry({ ...entry, notes: e.target.value })}
                 />
               </label>
             </div>
@@ -356,26 +432,7 @@ export function TriagePage() {
           </div>
         )}
 
-        {selectedIds.size > 0 && (
-          <div className="purpose-bar">
-            <div className="muted" style={{ marginBottom: '0.45rem' }}>
-              Batch classify {selectedIds.size} selected
-            </div>
-            <div className="actions">
-              {categories.map((c) => (
-                <button
-                  key={c.id}
-                  className={`btn ${c.deductible ? 'business' : 'personal'}`}
-                  onClick={() => void classifyBatch(c.id)}
-                >
-                  {c.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="drive-table-wrap">
+        <div className="drive-list-wrap">
           {loading && <p className="table-message muted">Loading drives…</p>}
           {error && (
             <p className="table-message" style={{ color: 'var(--danger)' }}>
@@ -389,113 +446,131 @@ export function TriagePage() {
                 : 'Inbox zero. New drives show up here once your car finishes a trip.'}
             </p>
           )}
+
           {drives.length > 0 && (
-            <table className="drive-table">
-              <thead>
-                <tr>
-                  <th className="col-check">
-                    <input
-                      type="checkbox"
-                      checked={allSelected}
-                      onChange={toggleSelectAll}
-                      aria-label="Select all drives"
-                    />
-                  </th>
-                  <th>When</th>
-                  <th>From</th>
-                  <th>To</th>
-                  <th className="col-num">Mi</th>
-                  <th>Vehicle</th>
-                  <th>Purpose</th>
-                  <th>Notes</th>
-                  <th>Classify</th>
-                </tr>
-              </thead>
-              <tbody>
-                {weekGroups.map((group) => (
-                  <Fragment key={group.start.toISOString()}>
-                    <tr className="week-row">
-                      <td colSpan={9}>{weekLabel(group.start)}</td>
-                    </tr>
-                    {group.drives.map((d) => {
-                      const draft = drafts[d.id] ?? {
-                        purposeNote: '',
-                        notes: '',
-                      };
-                      const missingLocation = driveMissingLocation(d);
-                      return (
-                        <tr key={d.id}>
-                          <td className="col-check">
-                            <input
-                              type="checkbox"
-                              checked={selectedIds.has(d.id)}
-                              onChange={() => toggleSelect(d.id)}
-                              aria-label={`Select drive on ${formatDriveWhen(d.startedAt)}`}
-                            />
-                          </td>
-                          <td className="col-when">{formatDriveWhen(d.startedAt)}</td>
-                          <td className="col-place" title={formatDriveStart(d)}>
-                            {formatDriveStart(d)}
-                          </td>
-                          <td className="col-place" title={formatDriveEnd(d)}>
-                            {formatDriveEnd(d)}
-                          </td>
-                          <td className="col-num">
-                            {d.distanceMiles?.toFixed(1) ?? '—'}
-                          </td>
-                          <td className="col-vehicle">
-                            {d.vehicleName ?? '—'}
-                          </td>
-                          <td>
-                            <input
-                              className="table-input"
-                              placeholder="Purpose"
-                              value={draft.purposeNote}
-                              onChange={(e) =>
-                                setDraft(d.id, { purposeNote: e.target.value })
-                              }
-                            />
-                          </td>
-                          <td>
-                            <input
-                              className="table-input"
-                              placeholder="Notes"
-                              value={draft.notes}
-                              onChange={(e) =>
-                                setDraft(d.id, { notes: e.target.value })
-                              }
-                            />
-                          </td>
-                          <td>
-                            <select
-                              className="table-select"
-                              defaultValue=""
-                              onChange={(e) => {
-                                void classify(d.id, e.target.value || null);
-                                e.target.value = '';
-                              }}
-                            >
-                              <option value="">Choose…</option>
-                              {categories.map((c) => (
-                                <option key={c.id} value={c.id}>
-                                  {c.name}
-                                </option>
-                              ))}
-                            </select>
-                            {missingLocation && (
-                              <span className="row-hint">No GPS on file</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
+            <div className="drive-cards mobile-only">
+              {weekGroups.map((group) => (
+                <Fragment key={group.start.toISOString()}>
+                  <div className="week-label">{weekLabel(group.start)}</div>
+                  {group.drives.map((d) => {
+                    const draft = drafts[d.id] ?? { notes: '', categoryId: '' };
+                    return (
+                      <DriveCard
+                        key={d.id}
+                        drive={d}
+                        categories={categories}
+                        notes={draft.notes}
+                        categoryId={draft.categoryId}
+                        selectable
+                        selected={selectedIds.has(d.id)}
+                        onSelect={() => toggleSelect(d.id)}
+                        onNotesChange={(notes) => setDraft(d.id, { notes })}
+                        onCategoryChange={(categoryId) =>
+                          setDraft(d.id, { categoryId })
+                        }
+                        onClassify={(status, categoryId) =>
+                          void classify(d.id, status, categoryId)
+                        }
+                      />
+                    );
+                  })}
+                </Fragment>
+              ))}
+            </div>
+          )}
+
+          {drives.length > 0 && (
+            <div className="drive-table-wrap desktop-only">
+              <table className="drive-table">
+                <thead>
+                  <tr>
+                    <th className="col-check">
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        onChange={toggleSelectAll}
+                        aria-label="Select all drives"
+                      />
+                    </th>
+                    <th>When</th>
+                    <th>From</th>
+                    <th>To</th>
+                    <th className="col-num">Mi</th>
+                    <th>Vehicle</th>
+                    <th>Classify</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {weekGroups.map((group) => (
+                    <Fragment key={group.start.toISOString()}>
+                      <tr className="week-row">
+                        <td colSpan={7}>{weekLabel(group.start)}</td>
+                      </tr>
+                      {group.drives.map(renderDriveRow)}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </section>
+
+      {selectedIds.size > 0 && (
+        <div className="sticky-batch-bar">
+          <div className="sticky-batch-inner">
+            <div className="muted batch-label">
+              {selectedIds.size} selected
+            </div>
+            <label className="batch-field">
+              <span className="muted">Trip type</span>
+              <select
+                className="table-select"
+                value={batchCategoryId}
+                onChange={(e) => setBatchCategoryId(e.target.value)}
+              >
+                <option value="">None</option>
+                <optgroup label="Business">
+                  {tripTypesForStatus(categories, 'BUSINESS').map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Personal">
+                  {tripTypesForStatus(categories, 'PERSONAL').map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
+            </label>
+            <input
+              className="table-input batch-notes"
+              placeholder="Notes"
+              value={batchNotes}
+              onChange={(e) => setBatchNotes(e.target.value)}
+            />
+            <div className="classify-row batch-actions">
+              <button
+                type="button"
+                className="btn business classify-btn"
+                onClick={() => void classifyBatch('BUSINESS')}
+              >
+                Business
+              </button>
+              <button
+                type="button"
+                className="btn personal classify-btn"
+                onClick={() => void classifyBatch('PERSONAL')}
+              >
+                Personal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

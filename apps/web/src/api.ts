@@ -105,10 +105,17 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(data),
     }),
-  batchClassify: (driveIds: string[], categoryId: string | null) =>
+  batchClassify: (
+    driveIds: string[],
+    data: {
+      status?: 'UNCLASSIFIED' | 'BUSINESS' | 'PERSONAL';
+      categoryId?: string | null;
+      notes?: string | null;
+    },
+  ) =>
     request<DriveSummary[]>('/drives/batch-classify', {
       method: 'POST',
-      body: JSON.stringify({ driveIds, categoryId }),
+      body: JSON.stringify({ driveIds, ...data }),
     }),
   simulateDrive: () =>
     request<{ ok: boolean; label: string; driveId?: string }>(

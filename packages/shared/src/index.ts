@@ -75,6 +75,7 @@ export const CreateDriveSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD'),
   distanceMiles: z.number().positive().max(10_000),
   vehicleId: z.string().nullable().optional(),
+  status: DriveStatusSchema.optional(),
   categoryId: z.string().nullable().optional(),
   purposeNote: z.string().max(500).optional().nullable(),
   notes: z.string().max(2000).optional().nullable(),
@@ -83,21 +84,30 @@ export const CreateDriveSchema = z.object({
 });
 export type CreateDrive = z.infer<typeof CreateDriveSchema>;
 
+/** Classify or update a drive. `status` is the primary Business/Personal enum. */
 export const ClassifyDriveSchema = z.object({
-  categoryId: z.string().nullable().optional(),
-  /** @deprecated prefer categoryId; kept for batch convenience */
   status: DriveStatusSchema.optional(),
-  purposeNote: z.string().max(500).optional().nullable(),
+  categoryId: z.string().nullable().optional(),
   notes: z.string().max(2000).optional().nullable(),
+  /** @deprecated use notes; kept for existing rows */
+  purposeNote: z.string().max(500).optional().nullable(),
 });
 export type ClassifyDrive = z.infer<typeof ClassifyDriveSchema>;
 
-export const BatchClassifySchema = z.object({
-  driveIds: z.array(z.string()).min(1),
-  categoryId: z.string().nullable(),
-  purposeNote: z.string().max(500).optional().nullable(),
-});
+export const BatchClassifySchema = z
+  .object({
+    driveIds: z.array(z.string()).min(1),
+    status: DriveStatusSchema.optional(),
+    categoryId: z.string().nullable().optional(),
+    notes: z.string().max(2000).optional().nullable(),
+  })
+  .refine((d) => d.status !== undefined || d.categoryId !== undefined, {
+    message: 'Provide status or categoryId',
+  });
 export type BatchClassify = z.infer<typeof BatchClassifySchema>;
+
+/** Default seeded names — trip-type pickers hide these; classification uses status enum. */
+export const SYSTEM_TRIP_TYPE_NAMES = ['Business', 'Personal'] as const;
 
 export const VehicleSchema = z.object({
   id: z.string(),

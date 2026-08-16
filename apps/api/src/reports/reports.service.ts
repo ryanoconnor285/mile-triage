@@ -11,11 +11,19 @@ type ExportRow = {
   startOdometer: number | '';
   endOdometer: number | '';
   totalMiles: number;
-  purpose: string;
+  classification: string;
+  tripType: string;
   purposeNote: string;
   notes: string;
   deduction: number;
+  isBusiness: boolean;
 };
+
+function classificationLabel(status: string): string {
+  if (status === 'BUSINESS') return 'Business';
+  if (status === 'PERSONAL') return 'Personal';
+  return 'Unclassified';
+}
 
 @Injectable()
 export class ReportsService {
@@ -34,7 +42,6 @@ export class ReportsService {
         startedAt: { gte: fromDate, lte: toDate },
         endedAt: { not: null },
       },
-      include: { category: true },
     });
 
     let businessMiles = 0;
@@ -44,10 +51,9 @@ export class ReportsService {
 
     for (const d of drives) {
       const miles = d.distanceMiles ?? 0;
-      const deductible = d.category?.deductible ?? d.status === 'BUSINESS';
-      if (!d.categoryId && d.status === 'UNCLASSIFIED') {
+      if (d.status === 'UNCLASSIFIED') {
         unclassifiedMiles += miles;
-      } else if (deductible) {
+      } else if (d.status === 'BUSINESS') {
         businessMiles += miles;
         businessDriveCount += 1;
       } else {
@@ -87,7 +93,7 @@ export class ReportsService {
 
     return drives.map((d) => {
       const miles = d.distanceMiles ?? 0;
-      const isBusiness = d.category?.deductible ?? d.status === 'BUSINESS';
+      const isBusiness = d.status === 'BUSINESS';
       return {
         date: d.startedAt.toISOString().slice(0, 10),
         vehicle: d.vehicle?.displayName ?? d.vehicle?.vin ?? 'Manual entry',
@@ -96,17 +102,20 @@ export class ReportsService {
         startOdometer: d.startOdometer ?? '',
         endOdometer: d.endOdometer ?? '',
         totalMiles: miles,
-        purpose: d.category?.name ?? d.status,
+        classification: classificationLabel(d.status),
+        tripType: d.category?.name ?? '',
         purposeNote: d.purposeNote ?? '',
         notes: d.notes ?? '',
         deduction: isBusiness
           ? Number((miles * settings.mileageRate).toFixed(2))
           : 0,
+        isBusiness,
       };
     });
   }
 
   toCsv(rows: ExportRow[]): string {
+    const hasLegacyPurpose = rows.some((r) => r.purposeNote.trim());
     const headers = [
       'Date',
       'Vehicle',
@@ -115,8 +124,9 @@ export class ReportsService {
       'Start Odometer',
       'End Odometer',
       'Total Miles',
-      'Category',
-      'Purpose Note',
+      'Classification',
+      'Trip Type',
+      ...(hasLegacyPurpose ? ['Purpose (legacy)'] : []),
       'Notes',
       'Deduction ($)',
     ];
@@ -131,8 +141,9 @@ export class ReportsService {
           r.startOdometer,
           r.endOdometer,
           r.totalMiles,
-          r.purpose,
-          r.purposeNote,
+          r.classification,
+          r.tripType,
+          ...(hasLegacyPurpose ? [r.purposeNote] : []),
           r.notes,
           r.deduction,
         ]
@@ -148,7 +159,7 @@ export class ReportsService {
     meta: { mileageRate: number; from: string; to: string },
   ): Promise<Buffer> {
     const businessMiles = rows
-      .filter((r) => r.purpose === 'BUSINESS')
+      .filter((r) => r.isBusiness)
       .reduce((s, r) => s + r.totalMiles, 0);
     const deduction = Number((businessMiles * meta.mileageRate).toFixed(2));
 
@@ -174,12 +185,15 @@ export class ReportsService {
 
       for (const r of rows) {
         if (doc.y > 720) doc.addPage();
-        doc
-          .fontSize(11)
-          .text(
-            `${r.date}  ·  ${r.totalMiles.toFixed(1)} mi  ·  ${r.purpose}`,
-            { continued: false },
-          );
+        const headline = [
+          r.date,
+          `${r.totalMiles.toFixed(1)} mi`,
+          r.classification,
+          r.tripType || null,
+        ]
+          .filter(Boolean)
+          .join('  ·  ');
+        doc.fontSize(11).text(headline, { continued: false });
         doc
           .fontSize(9)
           .fillColor('#333')
@@ -187,7 +201,7 @@ export class ReportsService {
         doc.text(
           `Odometer ${r.startOdometer}${r.endOdometer !== '' ? ` → ${r.endOdometer}` : ''}  ·  $${r.deduction.toFixed(2)}`,
         );
-        if (r.purposeNote) doc.text(`Purpose: ${r.purposeNote}`);
+        if (r.purposeNote) doc.text(`Purpose (legacy): ${r.purposeNote}`);
         if (r.notes) doc.text(`Notes: ${r.notes}`);
         doc.fillColor('#000').moveDown(0.55);
       }
